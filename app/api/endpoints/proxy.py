@@ -93,5 +93,8 @@ async def chat_completions(
             cost_usd=result["cost_usd"],
             savings_usd=result["savings_usd"],
             tokens_saved=result["tokens_saved"],
+            routing_reason=result.get("routing_reason"),
+            complexity=result.get("complexity"),
         ),
+
     )

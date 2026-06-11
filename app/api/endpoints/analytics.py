@@ -6,6 +6,7 @@ from app.db.models import RequestLog
 from app.schemas.analytics import AnalyticsResponse
 from app.services import analytics as analytics_service
 from app.engine.cache import get_cache_stats
+from app.engine.router import ROUTING_TABLE, Complexity
 
 router = APIRouter()
 
@@ -63,3 +64,42 @@ def get_compression_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/routing/stats", tags=["Analytics"])
+def get_routing_stats(db: Session = Depends(get_db)):
+    """Returns model routing decisions and savings breakdown."""
+    total_routed = (
+        db.query(func.count(RequestLog.id))
+        .filter(RequestLog.routed == True)  # noqa: E712
+        .scalar() or 0
+    )
+    total_routing_savings = (
+        db.query(func.sum(RequestLog.savings_usd))
+        .filter(RequestLog.routed == True, RequestLog.cache_hit == False)  # noqa: E712
+        .scalar() or 0.0
+    )
+    total_requests = db.query(func.count(RequestLog.id)).scalar() or 1
+
+    # Per-model breakdown of routed requests
+    model_breakdown = (
+        db.query(
+            RequestLog.model_used,
+            func.count(RequestLog.id).label("count"),
+        )
+        .filter(RequestLog.routed == True)  # noqa: E712
+        .group_by(RequestLog.model_used)
+        .all()
+    )
+
+    routing_table_info = {
+        level.value: model for level, (model, _) in ROUTING_TABLE.items() if model
+    }
+
+    return {
+        "total_routed_requests": total_routed,
+        "routing_rate": round(total_routed / total_requests, 4),
+        "total_savings_usd": round(float(total_routing_savings), 6),
+        "routed_model_breakdown": [
+            {"model": r.model_used, "count": r.count} for r in model_breakdown
+        ],
+        "routing_table": routing_table_info,
+    }

@@ -1,16 +1,14 @@
 """
-Gateway Service — Phase 4 (Context Compression)
-Orchestrates the full request lifecycle:
-  1. Check semantic cache (FAISS + DB)
-  2. Count input tokens (local, no API call)
-  3. Apply context compression                ← NEW Phase 4
-  4. Call the LLM provider (on cache miss)
-  5. Insert response into cache
-  6. Calculate cost + savings (cache + compression)  ← UPDATED Phase 4
-  7. Persist RequestLog to the database
+Gateway Service — Phase 5 (Model Router)
+Full optimization pipeline:
+  1. Semantic Cache Check      (Phase 3) — avoid LLM call entirely
+  2. Context Compression       (Phase 4) — reduce token count
+  3. Model Routing             (Phase 5) — use cheapest capable model
+  4. LLM Provider Call
+  5. Cache Insertion
+  6. Cost + Savings Calculation (cache + compression + routing)
+  7. RequestLog persistence
   8. Return structured response
-
-Phase 5 will inject Model Routing between compression and LLM call.
 """
 
 import time
@@ -25,9 +23,11 @@ from app.services.cost_estimator import (
     estimate_cost,
     estimate_cache_savings,
     estimate_compression_savings,
+    estimate_routing_savings,
 )
 from app.engine.cache import check_cache, insert_cache
 from app.engine.compressor import compress
+from app.engine.router import route
 from app.db.models import RequestLog
 
 logger = logging.getLogger("optillm.gateway")
@@ -44,7 +44,7 @@ async def process_request(
     db: Session,
 ) -> Dict[str, Any]:
     """
-    Main gateway entrypoint.
+    Main gateway entrypoint — runs the full Phase 3-5 optimization pipeline.
     Returns a dict matching the ChatCompletionResponse schema.
     """
     request_start = time.time()
@@ -56,7 +56,7 @@ async def process_request(
 
     # ── Pre-count original input tokens ─────────────────────────────────────
     original_tokens_in = count_tokens_in_messages(messages, model)
-    logger.info("[%s] Input tokens: %d", request_id, original_tokens_in)
+    logger.info("[%s] Request | model=%s | tokens=%d", request_id, model, original_tokens_in)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Phase 3: Semantic Cache Check
@@ -92,7 +92,6 @@ async def process_request(
                 "[%s] CACHE HIT | latency=%dms | saved=$%.6f",
                 request_id, latency_ms, savings,
             )
-
             return {
                 "id": f"cache-{uuid.uuid4().hex[:8]}",
                 "created": int(time.time()),
@@ -109,12 +108,13 @@ async def process_request(
                 "compressed": False,
                 "routed": False,
                 "model_requested": model,
+                "routing_reason": None,
+                "complexity": None,
             }
 
     # ─────────────────────────────────────────────────────────────────────────
     # Phase 4: Context Compression
-    # Applied to the messages SENT to the LLM — not to the cache lookup.
-    # The original `messages` are still used for cache insertion.
+    # Applied to messages sent to LLM — NOT to messages used for cache lookup.
     # ─────────────────────────────────────────────────────────────────────────
     compression_stats = {
         "original_tokens": original_tokens_in,
@@ -123,25 +123,44 @@ async def process_request(
         "was_compressed": False,
         "compression_ratio": 0.0,
     }
-
-    messages_to_send = messages  # default: send original
+    messages_to_send = messages
 
     if not bypass_compression:
         messages_to_send, compression_stats = compress(messages, model=model)
         if compression_stats["was_compressed"]:
             logger.info(
-                "[%s] COMPRESSED | %d → %d tokens | saved=%d (%.1f%%)",
+                "[%s] COMPRESSED | %d → %d tokens (%.1f%% reduction)",
                 request_id,
                 compression_stats["original_tokens"],
                 compression_stats["compressed_tokens"],
-                compression_stats["tokens_saved"],
                 compression_stats["compression_ratio"] * 100,
             )
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Phase 5 placeholder: Model Router will inject here
+    # Phase 5: Model Routing
+    # Run on ORIGINAL messages (uncompressed) for accurate complexity analysis.
     # ─────────────────────────────────────────────────────────────────────────
-    model_to_use = model
+    routing_result = {
+        "model_used": model,
+        "routed": False,
+        "complexity": "unknown",
+        "routing_reason": "Routing bypassed.",
+        "score_breakdown": {},
+    }
+
+    if not bypass_routing:
+        routing_result = route(messages, requested_model=model)
+        if routing_result["routed"]:
+            logger.info(
+                "[%s] ROUTED | %s → %s | complexity=%s | score=%s",
+                request_id,
+                model,
+                routing_result["model_used"],
+                routing_result["complexity"],
+                routing_result.get("score", "?"),
+            )
+
+    model_to_use = routing_result["model_used"]
 
     # ── Call provider ────────────────────────────────────────────────────────
     logger.info("[%s] Calling provider | model=%s", request_id, model_to_use)
@@ -157,18 +176,25 @@ async def process_request(
     tokens_out = provider_response["tokens_output"]
     cost = estimate_cost(model_to_use, tokens_in, tokens_out)
 
-    # ── Calculate compression savings ────────────────────────────────────────
+    # ── Calculate all savings ────────────────────────────────────────────────
     compression_savings = estimate_compression_savings(
         model=model_to_use,
         original_tokens=compression_stats["original_tokens"],
         compressed_tokens=compression_stats["compressed_tokens"],
     )
-    total_savings = compression_savings  # Phase 5 will add routing savings
+    routing_savings = estimate_routing_savings(
+        original_model=model,
+        routed_model=model_to_use,
+        tokens_input=tokens_in,
+        tokens_output=tokens_out,
+    ) if routing_result["routed"] else 0.0
 
-    # ── Insert into semantic cache (using ORIGINAL uncompressed messages) ────
+    total_savings = compression_savings + routing_savings
+
+    # ── Insert into semantic cache (always use ORIGINAL uncompressed messages)
     if not bypass_cache:
         insert_cache(
-            messages=messages,           # Original — not compressed version
+            messages=messages,
             response_text=provider_response["content"],
             model=provider_response["model"],
             tokens_input=tokens_in,
@@ -188,7 +214,7 @@ async def process_request(
         savings_usd=total_savings,
         cache_hit=False,
         compressed=compression_stats["was_compressed"],
-        routed=False,                  # Phase 5 will set True
+        routed=routing_result["routed"],
         latency_ms=total_latency_ms,
         prompt_snippet=prompt_snippet,
     )
@@ -196,8 +222,8 @@ async def process_request(
     db.commit()
 
     logger.info(
-        "[%s] Request complete | cost=$%.6f | compression_savings=$%.6f | latency=%dms",
-        request_id, cost, compression_savings, total_latency_ms,
+        "[%s] Complete | model_used=%s | cost=$%.6f | compression_savings=$%.6f | routing_savings=$%.6f | latency=%dms",
+        request_id, model_to_use, cost, compression_savings, routing_savings, total_latency_ms,
     )
 
     return {
@@ -214,6 +240,8 @@ async def process_request(
         "tokens_saved": compression_stats["tokens_saved"],
         "cache_hit": False,
         "compressed": compression_stats["was_compressed"],
-        "routed": False,
+        "routed": routing_result["routed"],
         "model_requested": model,
+        "routing_reason": routing_result.get("routing_reason"),
+        "complexity": str(routing_result.get("complexity", "")),
     }

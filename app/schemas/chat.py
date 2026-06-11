@@ -60,6 +60,9 @@ class OptiLLMMetadata(BaseModel):
     cost_usd: float
     savings_usd: float
     tokens_saved: int
+    routing_reason: Optional[str] = None
+    complexity: Optional[str] = None
+
 
 
 class ChatCompletionResponse(BaseModel):
