@@ -20,8 +20,7 @@ class RequestLogOut(BaseModel):
     latency_ms: int
     prompt_snippet: Optional[str]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class DashboardSummary(BaseModel):
@@ -55,3 +54,5 @@ class AnalyticsResponse(BaseModel):
     cost_over_time: List[CostOverTime]
     model_distribution: List[ModelDistribution]
     recent_requests: List[RequestLogOut]
+
+    model_config = {"protected_namespaces": ()}

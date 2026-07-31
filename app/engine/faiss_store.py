@@ -18,14 +18,19 @@ import faiss
 import numpy as np
 import threading
 import logging
+from app.core.config import settings
 
 logger = logging.getLogger("optillm.engine.faiss_store")
 
 VECTOR_DIM = 384  # all-MiniLM-L6-v2 output dimension
-FAISS_INDEX_PATH = "faiss_store/index.faiss"
 
 _index: faiss.IndexFlatIP | None = None
 _lock = threading.Lock()  # Thread-safe insertions
+
+
+def _faiss_path() -> str:
+    """Returns the configured FAISS index file path."""
+    return settings.FAISS_INDEX_PATH
 
 
 def _create_index() -> faiss.IndexFlatIP:
@@ -38,11 +43,12 @@ def load_index() -> faiss.IndexFlatIP:
     if _index is not None:
         return _index
 
-    os.makedirs("faiss_store", exist_ok=True)
+    path = _faiss_path()
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
-    if os.path.exists(FAISS_INDEX_PATH):
-        logger.info("Loading FAISS index from disk: %s", FAISS_INDEX_PATH)
-        _index = faiss.read_index(FAISS_INDEX_PATH)
+    if os.path.exists(path):
+        logger.info("Loading FAISS index from disk: %s", path)
+        _index = faiss.read_index(path)
         logger.info("FAISS index loaded — %d vectors.", _index.ntotal)
     else:
         logger.info("No existing FAISS index found. Creating fresh index.")
@@ -59,9 +65,10 @@ def get_index() -> faiss.IndexFlatIP:
 
 def save_index() -> None:
     """Persist the current FAISS index to disk."""
+    path = _faiss_path()
     index = get_index()
-    os.makedirs("faiss_store", exist_ok=True)
-    faiss.write_index(index, FAISS_INDEX_PATH)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    faiss.write_index(index, path)
     logger.debug("FAISS index saved to disk — %d vectors.", index.ntotal)
 
 
@@ -108,11 +115,12 @@ def total_vectors() -> int:
 
 
 def reset_index() -> None:
-    """Wipe the index (for testing only)."""
+    """Wipe the in-memory index and delete the persisted file."""
     global _index
+    path = _faiss_path()
     _index = _create_index()
-    if os.path.exists(FAISS_INDEX_PATH):
-        os.remove(FAISS_INDEX_PATH)
+    if os.path.exists(path):
+        os.remove(path)
     logger.warning("FAISS index has been reset.")
 
 

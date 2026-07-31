@@ -1,12 +1,31 @@
+# Environment
 .env
+.env.*
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
+*.pyo
+
+# Virtual environments
 .venv/
 venv/
+env/
+
+# Build artefacts
 dist/
 build/
+
+# Runtime data (generated at server startup — do not commit)
 *.db
 *.sqlite
-.DS_Store
 faiss_store/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp

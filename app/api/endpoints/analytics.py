@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/analytics", response_model=AnalyticsResponse, tags=["Analytics"])
 def get_analytics(db: Session = Depends(get_db)):
     """
-    Returns full analytics payload for the OptiLLM dashboard.
+    Returns the full analytics payload.
 
     Includes:
     - KPI summary (total requests, cache hit rate, cost saved, etc.)

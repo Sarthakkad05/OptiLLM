@@ -63,7 +63,7 @@ class OptiLLMMetadata(BaseModel):
     routing_reason: Optional[str] = None
     complexity: Optional[str] = None
 
-
+    model_config = {"protected_namespaces": ()}
 
 class ChatCompletionResponse(BaseModel):
     id: str

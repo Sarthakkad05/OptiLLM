@@ -221,7 +221,7 @@ def clear_cache(db: Session) -> int:
 
 
 def get_cache_stats(db: Session) -> Dict[str, Any]:
-    """Returns cache statistics for the dashboard."""
+    """Returns semantic cache health metrics."""
     total_entries = db.query(CacheEntry).count()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     expired = db.query(CacheEntry).filter(

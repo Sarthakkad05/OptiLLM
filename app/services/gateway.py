@@ -1,9 +1,9 @@
 """
-Gateway Service — Phase 5 (Model Router)
+Gateway Service
 Full optimization pipeline:
-  1. Semantic Cache Check      (Phase 3) — avoid LLM call entirely
-  2. Context Compression       (Phase 4) — reduce token count
-  3. Model Routing             (Phase 5) — use cheapest capable model
+  1. Semantic Cache Check      — avoid LLM call entirely
+  2. Context Compression       — reduce token count
+  3. Model Routing             — use cheapest capable model
   4. LLM Provider Call
   5. Cache Insertion
   6. Cost + Savings Calculation (cache + compression + routing)
@@ -44,23 +44,21 @@ async def process_request(
     db: Session,
 ) -> Dict[str, Any]:
     """
-    Main gateway entrypoint — runs the full Phase 3-5 optimization pipeline.
+    Main gateway entrypoint — runs the full optimization pipeline.
     Returns a dict matching the ChatCompletionResponse schema.
     """
     request_start = time.time()
     request_id = uuid.uuid4().hex[:12]
 
-    # ── Extract user prompt snippet for dashboard display ────────────────────
+    # Extract user prompt snippet for request logging
     user_messages = [m for m in messages if m.get("role") == "user"]
     prompt_snippet = user_messages[-1].get("content", "")[:200] if user_messages else ""
 
-    # ── Pre-count original input tokens ─────────────────────────────────────
+    # Pre-count original input tokens
     original_tokens_in = count_tokens_in_messages(messages, model)
     logger.info("[%s] Request | model=%s | tokens=%d", request_id, model, original_tokens_in)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 3: Semantic Cache Check
-    # ─────────────────────────────────────────────────────────────────────────
+    # ── Semantic Cache Check ──────────────────────────────────────────────────
     if not bypass_cache:
         cache_result = check_cache(messages, db)
         if cache_result:
@@ -112,10 +110,8 @@ async def process_request(
                 "complexity": None,
             }
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 4: Context Compression
+    # ── Context Compression ───────────────────────────────────────────────────
     # Applied to messages sent to LLM — NOT to messages used for cache lookup.
-    # ─────────────────────────────────────────────────────────────────────────
     compression_stats = {
         "original_tokens": original_tokens_in,
         "compressed_tokens": original_tokens_in,
@@ -136,10 +132,8 @@ async def process_request(
                 compression_stats["compression_ratio"] * 100,
             )
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Phase 5: Model Routing
+    # ── Model Routing ─────────────────────────────────────────────────────────
     # Run on ORIGINAL messages (uncompressed) for accurate complexity analysis.
-    # ─────────────────────────────────────────────────────────────────────────
     routing_result = {
         "model_used": model,
         "routed": False,
@@ -243,5 +237,5 @@ async def process_request(
         "routed": routing_result["routed"],
         "model_requested": model,
         "routing_reason": routing_result.get("routing_reason"),
-        "complexity": str(routing_result.get("complexity", "")),
+        "complexity": getattr(routing_result.get("complexity"), "value", str(routing_result.get("complexity", ""))),
     }
