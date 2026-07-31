@@ -199,6 +199,8 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
             "routing_reason": str,
         }
     """
+    from app.core.config import settings
+
     # Don't interfere if already on a cheap model
     if requested_model in _CHEAP_MODELS:
         return {
@@ -211,7 +213,13 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
         }
 
     complexity, score, breakdown = analyze_complexity(messages, requested_model)
-    routed_model, _ = ROUTING_TABLE.get(complexity, (None, None))
+    routed_model, provider = ROUTING_TABLE.get(complexity, (None, None))
+
+    # Safety Check: If routing to Gemini but no Gemini API key is configured, fallback to OpenAI's cheap model
+    if provider == "gemini":
+        gemini_missing = not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here"
+        if gemini_missing:
+            routed_model = "gpt-4o-mini"
 
     logger.info(
         "Routing analysis | requested=%s | complexity=%s | score=%d | breakdown=%s",
@@ -246,3 +254,54 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
         "score_breakdown": breakdown,
         "routing_reason": f"Task complexity={complexity} — original model retained.",
     }
+
+
+# ── Runtime Config ────────────────────────────────────────────────────────────
+
+def get_routing_config() -> Dict:
+    """
+    Returns the current routing configuration — models and score thresholds.
+    Exposed via GET /api/v1/router/config.
+    """
+    return {
+        "routing_table": {
+            level.value: model for level, (model, _) in ROUTING_TABLE.items() if model
+        },
+        "score_thresholds": {
+            "low_max_score": 0,    # score <= 0 → LOW
+            "medium_max_score": 2, # score <= 2 → MEDIUM
+        },
+        "expensive_models": list(_EXPENSIVE_MODELS),
+        "cheap_models": list(_CHEAP_MODELS),
+    }
+
+
+def update_routing_config(
+    low_model: str = None,
+    medium_model: str = None,
+    low_score_threshold: int = None,
+    medium_score_threshold: int = None,
+) -> Dict:
+    """
+    Update the routing table at runtime. Changes take effect immediately.
+    Exposed via POST /api/v1/router/config.
+
+    Args:
+        low_model: Model to use for LOW complexity tasks.
+        medium_model: Model to use for MEDIUM complexity tasks.
+        low_score_threshold: Score at or below which a task is LOW complexity.
+        medium_score_threshold: Score at or below which a task is MEDIUM complexity.
+    """
+    if low_model is not None:
+        # Detect provider from model name
+        provider = "gemini" if "gemini" in low_model.lower() else "openai"
+        ROUTING_TABLE[Complexity.LOW] = (low_model, provider)
+        logger.info("Routing config updated: LOW → %s (%s)", low_model, provider)
+
+    if medium_model is not None:
+        provider = "gemini" if "gemini" in medium_model.lower() else "openai"
+        ROUTING_TABLE[Complexity.MEDIUM] = (medium_model, provider)
+        logger.info("Routing config updated: MEDIUM → %s (%s)", medium_model, provider)
+
+    return get_routing_config()
+

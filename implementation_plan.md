@@ -326,3 +326,33 @@ Returns aggregated stats for the UI:
 *   **Action:** Open the Streamlit UI.
 *   **Narrative:** "For engineering leaders, visibility is key."
 *   **Visual:** Highlight the "Total Savings: $X.XX" and "Cache Hit Rate: 45%" metrics. Show the bar chart demonstrating how OptiLLM shielded the LLM API from 45% of unnecessary traffic.
+
+---
+
+## 14. Phase 8: Interactive Dynamic Test Area (Replacing demo.py)
+
+### Goal Description
+`demo.py` currently serves as a static CLI demonstration that fires hardcoded prompts to showcase OptiLLM's cache, compression, routing, and analytics. To better demonstrate the power of the OptiLLM gateway, we will replace `demo.py` with a stunning, interactive Web UI ("Test Area"). This allows users to dynamically type prompts, toggle optimization features in real-time, and instantly see the financial and latency impact.
+
+### Proposed Changes
+
+#### [MODIFY] `app/main.py`
+Add `CORSMiddleware` to allow requests from the local static web page to the FastAPI backend.
+
+#### [NEW] `test_area/index.html`
+The main HTML structure for the interactive testing playground. Will include a chat interface, settings panel for toggles (Bypass Cache, Bypass Compression, Bypass Routing), and an OptiLLM Metadata results panel.
+
+#### [NEW] `test_area/style.css`
+A premium, visually stunning aesthetic leveraging Vanilla CSS. Features will include a sleek dark mode, glassmorphism elements, micro-animations on hover/submit, and vibrant accent gradients (e.g., cyan/purple) to represent the AI features.
+
+#### [NEW] `test_area/app.js`
+Vanilla JavaScript to handle state, form submission, API requests to `http://localhost:8000/v1/chat/completions`, and dynamically rendering the response and `optillm_metadata` (Cache Hit, Tokens Saved, Cost, Routing Reason) with smooth transitions.
+
+### User Review Required
+> [!IMPORTANT]  
+> We will be building a standalone HTML/CSS/JS frontend specifically for this test area to maximize visual aesthetics and interactivity. Please review this plan. Once approved, I will implement the changes and add CORS to the backend so the frontend can connect seamlessly.
+
+### Verification Plan
+- Start the OptiLLM backend.
+- Open `test_area/index.html` in a browser.
+- Send queries with various toggle states and observe if the cache hits, routing triggers, and metadata correctly populate the UI.

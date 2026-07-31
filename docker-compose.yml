@@ -24,7 +24,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://optillm:password@db:5432/optillmdb
+    - DATABASE_URL=postgresql://optillm:password@db:5432/optillmdb
     env_file:
       - .env
     depends_on:

@@ -4,7 +4,7 @@ Aggregates request logs for the dashboard and API endpoints.
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, cast, Date
+from sqlalchemy import func
 from typing import List, Dict, Any
 from app.db.models import RequestLog
 import logging
@@ -69,22 +69,24 @@ def get_recent_requests(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
 
 def get_cost_over_time(db: Session) -> List[Dict[str, Any]]:
     """Daily aggregated cost and savings — used for the line chart."""
+    # func.date() works on both SQLite (native) and PostgreSQL (via SQL standard)
+    date_trunc = func.date(RequestLog.timestamp)
     rows = (
         db.query(
-            cast(RequestLog.timestamp, Date).label("date"),
+            date_trunc.label("date"),
             func.sum(RequestLog.cost_usd).label("cost"),
             func.sum(RequestLog.savings_usd).label("savings"),
             func.count(RequestLog.id).label("requests"),
         )
-        .group_by(cast(RequestLog.timestamp, Date))
-        .order_by(cast(RequestLog.timestamp, Date))
+        .group_by(date_trunc)
+        .order_by(date_trunc)
         .all()
     )
     return [
         {
             "date": str(r.date),
-            "cost_usd": round(float(r.cost), 6),
-            "savings_usd": round(float(r.savings), 6),
+            "cost_usd": round(float(r.cost or 0), 6),
+            "savings_usd": round(float(r.savings or 0), 6),
             "requests": r.requests,
         }
         for r in rows

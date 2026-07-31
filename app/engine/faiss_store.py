@@ -114,3 +114,50 @@ def reset_index() -> None:
     if os.path.exists(FAISS_INDEX_PATH):
         os.remove(FAISS_INDEX_PATH)
     logger.warning("FAISS index has been reset.")
+
+
+def rebuild_from_entries(entries: list) -> int:
+    """
+    Atomically rebuild the FAISS index from a list of (faiss_id, vector) pairs.
+    Called on startup to re-sync FAISS with the DB, fixing the ID-drift bug.
+
+    Args:
+        entries: List of (faiss_index_id: int, vector: np.ndarray shape (1, 384))
+                 Must be sorted by faiss_index_id ascending.
+
+    Returns:
+        Number of vectors re-indexed.
+    """
+    global _index
+    if not entries:
+        logger.info("rebuild_from_entries: no DB entries — keeping fresh index.")
+        _index = _create_index()
+        save_index()
+        return 0
+
+    new_index = _create_index()
+    # FAISS IndexFlatIP assigns IDs sequentially. We must insert in order.
+    sorted_entries = sorted(entries, key=lambda e: e[0])
+    expected_id = 0
+    vectors_added = 0
+
+    for faiss_id, vector in sorted_entries:
+        # If there's a gap (deleted entry), pad with a zero vector so IDs stay consistent
+        while expected_id < faiss_id:
+            pad = np.zeros((1, VECTOR_DIM), dtype=np.float32)
+            new_index.add(pad)
+            expected_id += 1
+        new_index.add(vector)
+        expected_id += 1
+        vectors_added += 1
+
+    with _lock:
+        _index = new_index
+        save_index()
+
+    logger.info(
+        "FAISS index rebuilt from DB — %d vectors re-indexed (total=%d).",
+        vectors_added, new_index.ntotal,
+    )
+    return vectors_added
+

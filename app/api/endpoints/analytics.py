@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db.session import get_db
 from app.db.models import RequestLog
 from app.schemas.analytics import AnalyticsResponse
 from app.services import analytics as analytics_service
-from app.engine.cache import get_cache_stats
-from app.engine.router import ROUTING_TABLE, Complexity
+from app.engine.cache import get_cache_stats, clear_cache
+from app.engine.router import ROUTING_TABLE, Complexity, update_routing_config, get_routing_config
 
 router = APIRouter()
+
 
 
 @router.get("/analytics", response_model=AnalyticsResponse, tags=["Analytics"])
@@ -103,3 +106,47 @@ def get_routing_stats(db: Session = Depends(get_db)):
         ],
         "routing_table": routing_table_info,
     }
+
+
+# ── Cache Management ───────────────────────────────────────────────────────────
+
+@router.delete("/cache/clear", tags=["Cache"])
+def clear_cache_endpoint(db: Session = Depends(get_db)):
+    """
+    Wipe all semantic cache entries and reset the FAISS index.
+    Use this when underlying data changes and cached responses are stale.
+    """
+    deleted = clear_cache(db)
+    return {"deleted_entries": deleted, "message": f"Cache cleared — {deleted} entries removed."}
+
+
+# ── Router Configuration ───────────────────────────────────────────────────────
+
+class RouterConfigUpdate(BaseModel):
+    low_model: Optional[str] = None     # Model for LOW complexity tasks
+    medium_model: Optional[str] = None  # Model for MEDIUM complexity tasks
+    low_score_threshold: Optional[int] = None    # Score <= this → LOW
+    medium_score_threshold: Optional[int] = None # Score <= this → MEDIUM
+
+
+@router.get("/router/config", tags=["Router"])
+def get_router_config():
+    """Returns the current model routing configuration."""
+    return get_routing_config()
+
+
+@router.post("/router/config", tags=["Router"])
+def update_router_config(update: RouterConfigUpdate):
+    """
+    Update the model routing table at runtime — no restart required.
+
+    Example: lower the cost ceiling by routing more to gemini-2.0-flash:
+        POST /api/v1/router/config
+        {"low_model": "gemini-2.0-flash", "medium_model": "gemini-2.0-flash"}
+    """
+    changes = update.model_dump(exclude_none=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No changes provided.")
+    updated = update_routing_config(**changes)
+    return {"message": "Routing config updated.", "new_config": updated}
+

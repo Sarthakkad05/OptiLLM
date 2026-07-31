@@ -10,7 +10,7 @@ class RequestLog(Base):
     __tablename__ = "request_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    timestamp = Column(DateTime, server_default=func.now(), index=True)
 
     # Request info
     model_requested = Column(String, nullable=False)       # What the client asked for
@@ -42,14 +42,23 @@ class CacheEntry(Base):
     """
     Stores cached LLM responses mapped to their FAISS vector index ID.
     The FAISS index holds the embedding; this table holds the response text.
+
+    prompt_text is stored so the FAISS index can be rebuilt from DB on startup,
+    preventing the FAISS↔DB ID drift that causes cache misses after restarts.
     """
     __tablename__ = "cache_entries"
 
     id = Column(Integer, primary_key=True, index=True)
     faiss_index_id = Column(Integer, unique=True, nullable=False, index=True)
+
+    # The raw prompt text — used to re-embed and rebuild FAISS on startup
+    prompt_text = Column(Text, nullable=False, default="")
+
     response_text = Column(Text, nullable=False)
     model = Column(String, nullable=False)
     tokens_input = Column(Integer, default=0)
     tokens_output = Column(Integer, default=0)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now())
 
+    # TTL: if set, cache entry expires after this timestamp
+    expires_at = Column(DateTime, nullable=True)
