@@ -13,8 +13,10 @@ class Settings(BaseSettings):
     # LLM Providers
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
     DEFAULT_PROVIDER: str = "openai"
     DEFAULT_MODEL: str = "gpt-4o"
+    REQUEST_TIMEOUT_SECONDS: float = 60.0
 
     # Storage paths
     FAISS_INDEX_PATH: str = "faiss_store/index.faiss"
@@ -23,6 +25,9 @@ class Settings(BaseSettings):
     API_KEY_AUTH_ENABLED: bool = False
     OPTILLM_API_KEYS: str = "sk-optillm-dev-key"  # Comma-separated allowed keys
     RATE_LIMIT_PER_MINUTE: int = 60
+    ALLOWED_PROVIDERS: str = "openai,gemini,anthropic"
+    ALLOWED_MODELS: str = "*"
+    ALLOWED_ORIGINS: str = "*"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
