@@ -37,12 +37,13 @@ logger = logging.getLogger("optillm.gateway")
 async def process_request(
     messages: List[Dict],
     model: str,
-    temperature: float,
-    max_tokens: Optional[int],
-    bypass_cache: bool,
-    bypass_compression: bool,
-    bypass_routing: bool,
-    db: Session,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    bypass_cache: bool = False,
+    bypass_compression: bool = False,
+    bypass_routing: bool = False,
+    db: Session = None,
+    tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Main gateway entrypoint — runs the full optimization pipeline.
@@ -87,7 +88,9 @@ async def process_request(
                 routed=False,
                 latency_ms=latency_ms,
                 prompt_snippet=prompt_snippet,
+                tag=tag,
             )
+
             db.add(log)
             db.commit()
 
@@ -222,6 +225,7 @@ async def process_request(
         routed=routing_result["routed"],
         latency_ms=total_latency_ms,
         prompt_snippet=prompt_snippet,
+        tag=tag,
     )
     db.add(log)
     db.commit()
@@ -264,12 +268,13 @@ async def process_request(
 async def process_stream_request(
     messages: List[Dict],
     model: str,
-    temperature: float,
-    max_tokens: Optional[int],
-    bypass_cache: bool,
-    bypass_compression: bool,
-    bypass_routing: bool,
-    db: Session,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    bypass_cache: bool = False,
+    bypass_compression: bool = False,
+    bypass_routing: bool = False,
+    db: Session = None,
+    tag: Optional[str] = None,
 ):
     """
     Streaming entrypoint — runs optimization pipeline and yields SSE data chunks.
@@ -371,6 +376,8 @@ async def process_stream_request(
         routed=routing_result.get("routed", False),
         latency_ms=total_latency_ms,
         prompt_snippet=prompt_snippet,
+        tag=tag,
     )
+
     db.add(log)
     db.commit()

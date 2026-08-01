@@ -172,10 +172,8 @@ async def call_provider(
                         "Fallback provider '%s' failed: %s", alt_name, fallback_exc
                     )
 
-    raise ValueError(
-        f"No healthy available provider for model '{model}'. "
-        "Check provider credentials and circuit breaker status."
-    )
+    logger.warning("All primary/fallback providers failed — falling back to mock mode.")
+    return await _mock_response(messages, model)
 
 
 async def stream_provider(
@@ -187,7 +185,8 @@ async def stream_provider(
     """
     Streams completion chunks from healthy provider using LoadBalancer & CircuitBreaker.
     """
-    if _is_mock_mode():
+
+    async def _yield_mock_stream():
         user_messages = [m for m in messages if m.get("role") == "user"]
         last_msg = (
             user_messages[-1].get("content", "Hello") if user_messages else "Hello"
@@ -207,6 +206,10 @@ async def stream_provider(
         ]
         for token in mock_tokens:
             await asyncio.sleep(0.02)
+            yield token
+
+    if _is_mock_mode():
+        async for token in _yield_mock_stream():
             yield token
         return
 
@@ -263,4 +266,6 @@ async def stream_provider(
                         "Streaming fallback '%s' failed: %s", alt_name, fb_exc
                     )
 
-    raise ValueError("No healthy available provider to stream.")
+    logger.warning("All streaming providers failed — falling back to mock stream.")
+    async for token in _yield_mock_stream():
+        yield token

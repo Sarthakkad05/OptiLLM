@@ -4,6 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.circuit_breaker import circuit_breaker
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -24,6 +25,14 @@ def setup_test_db():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def reset_circuit_breaker():
+    """Reset circuit breaker states before every test to ensure test isolation."""
+    circuit_breaker._circuits.clear()
+    yield
+    circuit_breaker._circuits.clear()
 
 
 @pytest.fixture

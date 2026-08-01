@@ -5,9 +5,9 @@ Clients can point their OpenAI SDK base_url to this endpoint with zero changes.
 """
 
 import logging
-from typing import Union
+from typing import Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -42,6 +42,7 @@ logger = logging.getLogger("optillm.proxy")
 async def chat_completions(
     request: ChatCompletionRequest,
     db: Session = Depends(get_db),
+    x_optillm_tag: Optional[str] = Header(None, alias="x-optillm-tag"),
 ) -> Union[ChatCompletionResponse, StreamingResponse]:
     """
     Accepts an OpenAI-style chat completion request, runs it through
@@ -64,6 +65,7 @@ async def chat_completions(
             bypass_compression=bypass_compression,
             bypass_routing=bypass_routing,
             db=db,
+            tag=x_optillm_tag,
         )
         return StreamingResponse(generator, media_type="text/event-stream")
 
@@ -77,6 +79,7 @@ async def chat_completions(
             bypass_compression=bypass_compression,
             bypass_routing=bypass_routing,
             db=db,
+            tag=x_optillm_tag,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -14,12 +14,11 @@ class RequestLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, server_default=func.now(), index=True)
 
-    # Request info
-    model_requested = Column(String, nullable=False)  # What the client asked for
-    model_used = Column(
-        String, nullable=False
-    )  # What was actually used (after routing)
-    provider = Column(String, nullable=False, default="openai")  # openai | gemini
+    # Request info & tags
+    model_requested = Column(String, nullable=False, index=True)
+    model_used = Column(String, nullable=False, index=True)
+    provider = Column(String, nullable=False, default="openai", index=True)
+    tag = Column(String(100), nullable=True, index=True)  # Header: x-optillm-tag
 
     # Token tracking
     tokens_input = Column(Integer, default=0)
@@ -31,9 +30,11 @@ class RequestLog(Base):
     savings_usd = Column(Float, default=0.0)  # Savings (cache + compression + routing)
 
     # Optimisation flags
-    cache_hit = Column(Boolean, default=False)
-    compressed = Column(Boolean, default=False)
-    routed = Column(Boolean, default=False)  # True if routed to cheaper model
+    cache_hit = Column(Boolean, default=False, index=True)
+    compressed = Column(Boolean, default=False, index=True)
+    routed = Column(
+        Boolean, default=False, index=True
+    )  # True if routed to cheaper model
 
     # Performance
     latency_ms = Column(Integer, default=0)
@@ -46,9 +47,6 @@ class CacheEntry(Base):
     """
     Stores cached LLM responses mapped to their FAISS vector index ID.
     The FAISS index holds the embedding; this table holds the response text.
-
-    prompt_text is stored so the FAISS index can be rebuilt from DB on startup,
-    preventing the FAISS↔DB ID drift that causes cache misses after restarts.
     """
 
     __tablename__ = "cache_entries"
