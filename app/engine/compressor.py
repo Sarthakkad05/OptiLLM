@@ -188,13 +188,18 @@ def compress(
     """
     original_tokens = count_tokens_in_messages(messages, model)
 
-    # Always run cleaning pass
+    # Always run cleaning pass & deduplication pass
     cleaned = _clean_messages(messages)
+    from app.engine.prompt_optimizer import deduplicate_messages, summarize_conversation
+
+    cleaned, _ = deduplicate_messages(cleaned)
+    cleaned, _ = summarize_conversation(cleaned, max_turns=8)
 
     was_compressed = False
     final_messages = cleaned
 
     if original_tokens > max_tokens:
+
         logger.info(
             "Compression triggered | original=%d tokens | threshold=%d",
             original_tokens,

@@ -65,3 +65,23 @@ class CacheEntry(Base):
 
     # TTL: if set, cache entry expires after this timestamp
     expires_at = Column(DateTime, nullable=True)
+
+
+class KeyBudget(Base):
+    """
+    Per-API Key spend budget management (daily & monthly caps).
+    """
+
+    __tablename__ = "key_budgets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    api_key = Column(String(100), unique=True, nullable=False, index=True)
+
+    daily_budget_usd = Column(Float, default=10.0)
+    monthly_budget_usd = Column(Float, default=100.0)
+
+    daily_spent_usd = Column(Float, default=0.0)
+    monthly_spent_usd = Column(Float, default=0.0)
+
+    last_reset_day = Column(String(10), nullable=True)  # YYYY-MM-DD
+    last_reset_month = Column(String(7), nullable=True)  # YYYY-MM

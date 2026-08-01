@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import verify_api_key
+from app.core.budget_manager import check_budget_and_predict, record_spend
 from app.core.rate_limiter import check_rate_limit
 from app.db.session import get_db
 from app.schemas.chat import (
@@ -42,18 +43,33 @@ logger = logging.getLogger("optillm.proxy")
 async def chat_completions(
     request: ChatCompletionRequest,
     db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
     x_optillm_tag: Optional[str] = Header(None, alias="x-optillm-tag"),
 ) -> Union[ChatCompletionResponse, StreamingResponse]:
     """
     Accepts an OpenAI-style chat completion request, runs it through
     the OptiLLM optimization pipeline, and returns a standard response or SSE stream.
     """
+    api_key = "default-key"
+    if authorization and authorization.startswith("Bearer "):
+        api_key = authorization.replace("Bearer ", "").strip()
+
     messages = [m.model_dump() for m in request.messages]
     config = request.optillm or {}
 
     bypass_cache = getattr(config, "bypass_cache", False)
     bypass_compression = getattr(config, "bypass_compression", False)
     bypass_routing = getattr(config, "bypass_routing", False)
+
+    # Pre-flight Budget Check
+    allowed, predicted_cost, reason = check_budget_and_predict(
+        api_key=api_key,
+        model=request.model,
+        messages=messages,
+        db=db,
+    )
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
 
     if request.stream:
         generator = process_stream_request(
@@ -81,6 +97,8 @@ async def chat_completions(
             db=db,
             tag=x_optillm_tag,
         )
+        # Record actual spend in budget manager
+        record_spend(api_key=api_key, cost_usd=result.get("cost_usd", 0.0), db=db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
