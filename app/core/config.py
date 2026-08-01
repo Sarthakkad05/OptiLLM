@@ -27,7 +27,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     ALLOWED_PROVIDERS: str = "openai,gemini,anthropic"
     ALLOWED_MODELS: str = "*"
-    ALLOWED_ORIGINS: str = "*"
+    # High Availability & Routing Strategies
+    ROUTING_STRATEGY: str = (
+        "cost_optimized"  # cost_optimized | round_robin | least_latency
+    )
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
+    CIRCUIT_BREAKER_RECOVERY_TIME: float = 30.0
+    HEALTH_CHECK_INTERVAL_SECONDS: float = 60.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

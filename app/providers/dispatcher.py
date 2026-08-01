@@ -1,11 +1,12 @@
 """
 Provider Dispatcher.
-Routes completion requests dynamically to registered BaseProvider adapters using ProviderRegistry.
+Routes completion requests dynamically using ProviderRegistry, CircuitBreaker, and LoadBalancer.
 
 Features:
-  - Dynamic Provider Lookup via ProviderRegistry
+  - Load Balancer Strategy Selection (cost_optimized, round_robin, least_latency)
+  - Circuit Breaker Fault Isolation (CLOSED, OPEN, HALF_OPEN)
   - Automatic Retry with exponential backoff on transient errors
-  - Provider Fallback to available alternative providers if primary fails
+  - Automatic Provider Fallback if primary fails or circuit is OPEN
   - Mock Mode when no provider API keys are configured
 """
 
@@ -14,6 +15,8 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
+from app.core.circuit_breaker import circuit_breaker
+from app.providers.load_balancer import load_balancer
 from app.providers.registry import provider_registry
 from app.services.token_counter import count_tokens_in_messages
 
@@ -74,13 +77,18 @@ async def _call_with_retry(
     temperature: float,
     max_tokens: Optional[int],
 ) -> Dict[str, Any]:
-    """Call provider adapter with exponential backoff retry."""
+    """Call provider adapter with exponential backoff retry & circuit breaker recording."""
     last_exc = None
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            return await provider_adapter.call(messages, model, temperature, max_tokens)
+            res = await provider_adapter.call(messages, model, temperature, max_tokens)
+            circuit_breaker.record_success(
+                provider_adapter.name, res.get("latency_ms", 0.0)
+            )
+            return res
         except Exception as exc:
             last_exc = exc
+            circuit_breaker.record_failure(provider_adapter.name)
             if attempt < _MAX_RETRIES:
                 delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
                 logger.warning(
@@ -109,51 +117,64 @@ async def call_provider(
     max_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
-    Dispatches request to appropriate registered provider with retry and fallback.
+    Dispatches request using LoadBalancer & CircuitBreaker.
     """
     if _is_mock_mode():
         logger.warning("No API keys configured — MOCK MODE enabled.")
         return await _mock_response(messages, model)
 
-    # Resolve target provider using registry
-    provider = provider_registry.get_for_model(model)
-    if not provider:
-        # Fallback default provider
-        provider = provider_registry.get("openai") or provider_registry.get("gemini")
+    # Select provider via LoadBalancer (respects circuit breaker state)
+    provider = load_balancer.select_provider(model=model)
 
-    if provider and provider.is_available():
+    if (
+        provider
+        and provider.is_available()
+        and circuit_breaker.can_execute(provider.name)
+    ):
         try:
             return await _call_with_retry(
                 provider, messages, model, temperature, max_tokens
             )
         except Exception as primary_exc:
             logger.warning(
-                "Primary provider '%s' failed: %s — trying fallback provider.",
+                "Primary provider '%s' failed: %s — attempting fallback provider.",
                 provider.name,
                 primary_exc,
             )
 
-    # Fallback to any other available provider
+    # Fallback to any other healthy available provider
     for alt_name in provider_registry.list_available_providers():
-        alt_provider = provider_registry.get(alt_name)
-        if alt_provider and alt_provider != provider:
-            fallback_model = (
-                "gpt-4o-mini" if alt_name == "openai" else "gemini-2.0-flash"
-            )
-            logger.info(
-                "Falling back to provider '%s' with model '%s'",
-                alt_name,
-                fallback_model,
-            )
-            res = await _call_with_retry(
-                alt_provider, messages, fallback_model, temperature, max_tokens
-            )
-            res["provider"] = f"{alt_name}-fallback"
-            return res
+        if circuit_breaker.can_execute(alt_name):
+            alt_provider = provider_registry.get(alt_name)
+            if alt_provider and alt_provider != provider:
+                fallback_model = (
+                    "gpt-4o-mini"
+                    if alt_name == "openai"
+                    else (
+                        "gemini-2.0-flash"
+                        if alt_name == "gemini"
+                        else "claude-3-5-haiku-20241022"
+                    )
+                )
+                logger.info(
+                    "Falling back to healthy provider '%s' with model '%s'",
+                    alt_name,
+                    fallback_model,
+                )
+                try:
+                    res = await _call_with_retry(
+                        alt_provider, messages, fallback_model, temperature, max_tokens
+                    )
+                    res["provider"] = f"{alt_name}-fallback"
+                    return res
+                except Exception as fallback_exc:
+                    logger.warning(
+                        "Fallback provider '%s' failed: %s", alt_name, fallback_exc
+                    )
 
     raise ValueError(
-        f"No available provider for model '{model}'. "
-        "Check OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY in .env"
+        f"No healthy available provider for model '{model}'. "
+        "Check provider credentials and circuit breaker status."
     )
 
 
@@ -164,7 +185,7 @@ async def stream_provider(
     max_tokens: Optional[int] = None,
 ):
     """
-    Streams completion chunks from the target provider adapter via registry lookup.
+    Streams completion chunks from healthy provider using LoadBalancer & CircuitBreaker.
     """
     if _is_mock_mode():
         user_messages = [m for m in messages if m.get("role") == "user"]
@@ -189,34 +210,57 @@ async def stream_provider(
             yield token
         return
 
-    provider = provider_registry.get_for_model(model)
-    if provider and provider.is_available():
-        async for chunk in provider.stream(messages, model, temperature, max_tokens):
-            yield chunk
-        return
-
-    # Fallback to any other available provider with a compatible model
-    for alt_name in provider_registry.list_available_providers():
-        alt_provider = provider_registry.get(alt_name)
-        if alt_provider:
-            fallback_model = (
-                "gpt-4o-mini"
-                if alt_name == "openai"
-                else (
-                    "gemini-2.0-flash"
-                    if alt_name == "gemini"
-                    else "claude-3-5-haiku-20241022"
-                )
-            )
-            logger.info(
-                "Streaming fallback to provider '%s' with model '%s'",
-                alt_name,
-                fallback_model,
-            )
-            async for chunk in alt_provider.stream(
-                messages, fallback_model, temperature, max_tokens
+    provider = load_balancer.select_provider(model=model)
+    if (
+        provider
+        and provider.is_available()
+        and circuit_breaker.can_execute(provider.name)
+    ):
+        try:
+            async for chunk in provider.stream(
+                messages, model, temperature, max_tokens
             ):
                 yield chunk
+            circuit_breaker.record_success(provider.name)
             return
+        except Exception as exc:
+            circuit_breaker.record_failure(provider.name)
+            logger.warning(
+                "Streaming provider '%s' failed: %s — trying fallback.",
+                provider.name,
+                exc,
+            )
 
-    raise ValueError("No available provider to stream.")
+    # Fallback streaming to any other healthy available provider
+    for alt_name in provider_registry.list_available_providers():
+        if circuit_breaker.can_execute(alt_name):
+            alt_provider = provider_registry.get(alt_name)
+            if alt_provider and alt_provider != provider:
+                fallback_model = (
+                    "gpt-4o-mini"
+                    if alt_name == "openai"
+                    else (
+                        "gemini-2.0-flash"
+                        if alt_name == "gemini"
+                        else "claude-3-5-haiku-20241022"
+                    )
+                )
+                logger.info(
+                    "Streaming fallback to healthy provider '%s' with model '%s'",
+                    alt_name,
+                    fallback_model,
+                )
+                try:
+                    async for chunk in alt_provider.stream(
+                        messages, fallback_model, temperature, max_tokens
+                    ):
+                        yield chunk
+                    circuit_breaker.record_success(alt_name)
+                    return
+                except Exception as fb_exc:
+                    circuit_breaker.record_failure(alt_name)
+                    logger.warning(
+                        "Streaming fallback '%s' failed: %s", alt_name, fb_exc
+                    )
+
+    raise ValueError("No healthy available provider to stream.")

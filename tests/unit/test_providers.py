@@ -1,6 +1,4 @@
-from app.providers.anthropic_client import (
-    _openai_messages_to_anthropic,
-)
+from app.providers.anthropic_client import _openai_messages_to_anthropic
 from app.providers.registry import provider_registry
 
 

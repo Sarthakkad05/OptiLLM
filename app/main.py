@@ -13,6 +13,7 @@ from app.db.session import SessionLocal, engine
 from app.engine.cache import sync_cache_on_startup
 from app.engine.embedding import load_model
 from app.engine.faiss_store import load_index
+from app.services.provider_health import start_health_check_task, stop_health_check_task
 
 
 @asynccontextmanager
@@ -45,9 +46,13 @@ async def lifespan(app: FastAPI):
         db.close()
     logger.info("✅ Cache sync complete.")
 
+    # Start provider health check background task
+    start_health_check_task()
+
     yield
 
     # ── Shutdown ───────────────────────────────────────────────────────────────
+    stop_health_check_task()
     logger.info("🛑 OptiLLM Gateway shutting down.")
 
 
