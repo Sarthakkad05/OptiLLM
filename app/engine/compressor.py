@@ -21,9 +21,10 @@ Design Rules:
   - User messages receive center-truncation.
 """
 
-import re
 import logging
-from typing import List, Dict, Tuple, Any
+import re
+from typing import Any, Dict, List, Tuple
+
 from app.services.token_counter import count_tokens_in_messages, count_tokens_in_string
 
 logger = logging.getLogger("optillm.engine.compressor")
@@ -43,22 +44,23 @@ END_FRACTION = 0.70
 
 # ── Pass 1: Heuristic Cleaning ────────────────────────────────────────────────
 
+
 def _clean_text(text: str) -> str:
     """Apply heuristic cleaning to reduce noise tokens."""
     # Collapse 3+ consecutive newlines into 2
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     # Collapse 3+ consecutive spaces into 1
-    text = re.sub(r' {3,}', ' ', text)
+    text = re.sub(r" {3,}", " ", text)
     # Remove repeated markdown horizontal rules (---, ___, ***)
-    text = re.sub(r'([-_*]{3,}\n?){2,}', '---\n', text)
+    text = re.sub(r"([-_*]{3,}\n?){2,}", "---\n", text)
     # Deduplicate consecutive identical lines
-    lines = text.split('\n')
+    lines = text.split("\n")
     deduped = [lines[0]] if lines else []
     for line in lines[1:]:
         if line.strip() and line.strip() == deduped[-1].strip():
             continue  # skip duplicate line
         deduped.append(line)
-    text = '\n'.join(deduped)
+    text = "\n".join(deduped)
     return text.strip()
 
 
@@ -66,14 +68,17 @@ def _clean_messages(messages: List[Dict]) -> List[Dict]:
     """Apply heuristic cleaning to all messages."""
     cleaned = []
     for msg in messages:
-        cleaned.append({
-            **msg,
-            "content": _clean_text(msg.get("content", "")),
-        })
+        cleaned.append(
+            {
+                **msg,
+                "content": _clean_text(msg.get("content", "")),
+            }
+        )
     return cleaned
 
 
 # ── Pass 2: Token-Aware Truncation ────────────────────────────────────────────
+
 
 def _truncate_text(text: str, max_tokens: int, model: str) -> str:
     """
@@ -95,8 +100,8 @@ def _truncate_text(text: str, max_tokens: int, model: str) -> str:
     keep_start = int(keep_words * START_FRACTION)
     keep_end = int(keep_words * END_FRACTION)
 
-    start_part = ' '.join(words[:keep_start])
-    end_part = ' '.join(words[total_words - keep_end:])
+    start_part = " ".join(words[:keep_start])
+    end_part = " ".join(words[total_words - keep_end :])
 
     truncated = f"{start_part}\n\n...[CONTEXT COMPRESSED — {total_words - keep_start - keep_end} words removed]...\n\n{end_part}"
     logger.debug("Truncated message: %d → ~%d tokens", current_tokens, max_tokens)
@@ -112,7 +117,6 @@ def _truncate_messages(
     - User/assistant messages: center-truncate the largest ones first.
     """
     result = []
-    remaining_budget = token_budget
 
     # Separate system from conversational messages
     system_msgs = [m for m in messages if m.get("role") == "system"]
@@ -157,6 +161,7 @@ def _truncate_messages(
 
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
+
 def compress(
     messages: List[Dict],
     model: str = "gpt-4o",
@@ -185,7 +190,6 @@ def compress(
 
     # Always run cleaning pass
     cleaned = _clean_messages(messages)
-    cleaned_tokens = count_tokens_in_messages(cleaned, model)
 
     was_compressed = False
     final_messages = cleaned
@@ -193,19 +197,25 @@ def compress(
     if original_tokens > max_tokens:
         logger.info(
             "Compression triggered | original=%d tokens | threshold=%d",
-            original_tokens, max_tokens,
+            original_tokens,
+            max_tokens,
         )
         was_compressed = True
         final_messages = _truncate_messages(cleaned, max_tokens, model)
     else:
         logger.debug(
             "No truncation needed | original=%d tokens (threshold=%d)",
-            original_tokens, max_tokens,
+            original_tokens,
+            max_tokens,
         )
 
     compressed_tokens = count_tokens_in_messages(final_messages, model)
     tokens_saved = max(0, original_tokens - compressed_tokens)
-    compression_ratio = round(1.0 - (compressed_tokens / original_tokens), 4) if original_tokens > 0 else 0.0
+    compression_ratio = (
+        round(1.0 - (compressed_tokens / original_tokens), 4)
+        if original_tokens > 0
+        else 0.0
+    )
 
     stats = {
         "original_tokens": original_tokens,
@@ -218,7 +228,10 @@ def compress(
     if was_compressed:
         logger.info(
             "Compression complete | %d → %d tokens | saved=%d | ratio=%.1f%%",
-            original_tokens, compressed_tokens, tokens_saved, compression_ratio * 100,
+            original_tokens,
+            compressed_tokens,
+            tokens_saved,
+            compression_ratio * 100,
         )
 
     return final_messages, stats

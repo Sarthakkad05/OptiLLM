@@ -11,24 +11,25 @@ Full optimization pipeline:
   8. Return structured response
 """
 
+import logging
 import time
 import uuid
-import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from sqlalchemy.orm import Session
 
-from app.providers.dispatcher import call_provider
-from app.services.token_counter import count_tokens_in_messages
-from app.services.cost_estimator import (
-    estimate_cost,
-    estimate_cache_savings,
-    estimate_compression_savings,
-    estimate_routing_savings,
-)
+from app.db.models import RequestLog
 from app.engine.cache import check_cache, insert_cache
 from app.engine.compressor import compress
 from app.engine.router import route
-from app.db.models import RequestLog
+from app.providers.dispatcher import call_provider, stream_provider
+from app.services.cost_estimator import (
+    estimate_cache_savings,
+    estimate_compression_savings,
+    estimate_cost,
+    estimate_routing_savings,
+)
+from app.services.token_counter import count_tokens_in_messages
 
 logger = logging.getLogger("optillm.gateway")
 
@@ -56,7 +57,9 @@ async def process_request(
 
     # Pre-count original input tokens
     original_tokens_in = count_tokens_in_messages(messages, model)
-    logger.info("[%s] Request | model=%s | tokens=%d", request_id, model, original_tokens_in)
+    logger.info(
+        "[%s] Request | model=%s | tokens=%d", request_id, model, original_tokens_in
+    )
 
     # ── Semantic Cache Check ──────────────────────────────────────────────────
     if not bypass_cache:
@@ -65,7 +68,9 @@ async def process_request(
             cached_tokens_in = cache_result["tokens_input"]
             cached_tokens_out = cache_result["tokens_output"]
             cached_model = cache_result["model"]
-            savings = estimate_cache_savings(cached_model, cached_tokens_in, cached_tokens_out)
+            savings = estimate_cache_savings(
+                cached_model, cached_tokens_in, cached_tokens_out
+            )
             latency_ms = int((time.time() - request_start) * 1000)
 
             log = RequestLog(
@@ -88,7 +93,9 @@ async def process_request(
 
             logger.info(
                 "[%s] CACHE HIT | latency=%dms | saved=$%.6f",
-                request_id, latency_ms, savings,
+                request_id,
+                latency_ms,
+                savings,
             )
             return {
                 "id": f"cache-{uuid.uuid4().hex[:8]}",
@@ -176,12 +183,16 @@ async def process_request(
         original_tokens=compression_stats["original_tokens"],
         compressed_tokens=compression_stats["compressed_tokens"],
     )
-    routing_savings = estimate_routing_savings(
-        original_model=model,
-        routed_model=model_to_use,
-        tokens_input=tokens_in,
-        tokens_output=tokens_out,
-    ) if routing_result["routed"] else 0.0
+    routing_savings = (
+        estimate_routing_savings(
+            original_model=model,
+            routed_model=model_to_use,
+            tokens_input=tokens_in,
+            tokens_output=tokens_out,
+        )
+        if routing_result["routed"]
+        else 0.0
+    )
 
     total_savings = compression_savings + routing_savings
 
@@ -217,7 +228,12 @@ async def process_request(
 
     logger.info(
         "[%s] Complete | model_used=%s | cost=$%.6f | compression_savings=$%.6f | routing_savings=$%.6f | latency=%dms",
-        request_id, model_to_use, cost, compression_savings, routing_savings, total_latency_ms,
+        request_id,
+        model_to_use,
+        cost,
+        compression_savings,
+        routing_savings,
+        total_latency_ms,
     )
 
     return {
@@ -237,5 +253,124 @@ async def process_request(
         "routed": routing_result["routed"],
         "model_requested": model,
         "routing_reason": routing_result.get("routing_reason"),
-        "complexity": getattr(routing_result.get("complexity"), "value", str(routing_result.get("complexity", ""))),
+        "complexity": getattr(
+            routing_result.get("complexity"),
+            "value",
+            str(routing_result.get("complexity", "")),
+        ),
     }
+
+
+async def process_stream_request(
+    messages: List[Dict],
+    model: str,
+    temperature: float,
+    max_tokens: Optional[int],
+    bypass_cache: bool,
+    bypass_compression: bool,
+    bypass_routing: bool,
+    db: Session,
+):
+    """
+    Streaming entrypoint — runs optimization pipeline and yields SSE data chunks.
+    Format: 'data: {"id": "...", "object": "chat.completion.chunk", ...}\n\n'
+    """
+    import json
+
+    request_start = time.time()
+    request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+    created = int(time.time())
+
+    user_messages = [m for m in messages if m.get("role") == "user"]
+    prompt_snippet = user_messages[-1].get("content", "")[:200] if user_messages else ""
+
+    # ── Context Compression ──
+    messages_to_send = messages
+    compression_stats = {
+        "original_tokens": 0,
+        "compressed_tokens": 0,
+        "tokens_saved": 0,
+        "was_compressed": False,
+    }
+    if not bypass_compression:
+        messages_to_send, compression_stats = compress(messages, model=model)
+
+    # ── Model Routing ──
+    routing_result = {"model_used": model, "routed": False}
+    if not bypass_routing:
+        routing_result = route(messages, requested_model=model)
+
+    model_to_use = routing_result["model_used"]
+    accumulated_content = []
+
+    # Stream from provider
+    async for text_chunk in stream_provider(
+        messages=messages_to_send,
+        model=model_to_use,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    ):
+        accumulated_content.append(text_chunk)
+        chunk_obj = {
+            "id": request_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model_to_use,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": text_chunk},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        yield f"data: {json.dumps(chunk_obj)}\n\n"
+
+    # Final completion chunk with finish_reason='stop'
+    final_chunk = {
+        "id": request_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model_to_use,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    yield f"data: {json.dumps(final_chunk)}\n\n"
+    yield "data: [DONE]\n\n"
+
+    full_text = "".join(accumulated_content)
+    total_latency_ms = int((time.time() - request_start) * 1000)
+
+    # Insert into cache & log request
+    if not bypass_cache and full_text:
+        insert_cache(
+            messages=messages,
+            response_text=full_text,
+            model=model_to_use,
+            tokens_input=compression_stats.get("compressed_tokens", 0),
+            tokens_output=len(full_text.split()),
+            db=db,
+        )
+
+    log = RequestLog(
+        model_requested=model,
+        model_used=model_to_use,
+        provider="stream",
+        tokens_input=compression_stats.get("original_tokens", 0),
+        tokens_output=len(full_text.split()),
+        tokens_saved=compression_stats.get("tokens_saved", 0),
+        cost_usd=0.0,
+        savings_usd=0.0,
+        cache_hit=False,
+        compressed=compression_stats.get("was_compressed", False),
+        routed=routing_result.get("routed", False),
+        latency_ms=total_latency_ms,
+        prompt_snippet=prompt_snippet,
+    )
+    db.add(log)
+    db.commit()

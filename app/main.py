@@ -1,14 +1,18 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
-from app.core.logging import logger
+
 from app.api.api import api_router
+from app.core.config import settings
+from app.core.errors import http_exception_handler, unhandled_exception_handler
+from app.core.logging import logger
+from app.core.middleware import RequestLoggingMiddleware
+from app.db.base import Base  # noqa: F401 — ensures all models are registered
+from app.db.session import SessionLocal, engine
+from app.engine.cache import sync_cache_on_startup
 from app.engine.embedding import load_model
 from app.engine.faiss_store import load_index
-from app.engine.cache import sync_cache_on_startup
-from app.db.session import engine, SessionLocal
-from app.db.base import Base  # noqa: F401 — ensures all models are registered
 
 
 @asynccontextmanager
@@ -17,7 +21,11 @@ async def lifespan(app: FastAPI):
     # ── Startup ────────────────────────────────────────────────────────────────
     logger.info("🚀 OptiLLM Gateway starting up...")
     logger.info("Environment : %s", settings.APP_ENV)
-    logger.info("Default provider: %s / model: %s", settings.DEFAULT_PROVIDER, settings.DEFAULT_MODEL)
+    logger.info(
+        "Default provider: %s / model: %s",
+        settings.DEFAULT_PROVIDER,
+        settings.DEFAULT_MODEL,
+    )
 
     # Ensure all DB tables exist (idempotent — safe to run on every start)
     Base.metadata.create_all(bind=engine)
@@ -52,6 +60,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Exception handlers for RFC 7807 problem details
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+
+# Middlewares
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

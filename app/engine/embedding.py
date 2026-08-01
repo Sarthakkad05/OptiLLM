@@ -9,9 +9,10 @@ Model: all-MiniLM-L6-v2
   - Strong semantic similarity on short texts
 """
 
-import numpy as np
 import logging
 from typing import List
+
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger("optillm.engine.embedding")

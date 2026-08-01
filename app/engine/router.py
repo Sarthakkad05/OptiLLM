@@ -20,14 +20,16 @@ Savings:
 """
 
 import logging
-from typing import List, Dict, Tuple
 from enum import Enum
+from typing import Dict, List, Tuple
+
 from app.services.token_counter import count_tokens_in_messages
 
 logger = logging.getLogger("optillm.engine.router")
 
 
 # ── Complexity Levels ─────────────────────────────────────────────────────────
+
 
 class Complexity(str, Enum):
     LOW = "low"
@@ -38,44 +40,80 @@ class Complexity(str, Enum):
 # ── Routing Table ─────────────────────────────────────────────────────────────
 # Maps complexity → (preferred_model, provider)
 ROUTING_TABLE: Dict[Complexity, Tuple[str, str]] = {
-    Complexity.LOW:    ("gemini-2.0-flash", "gemini"),
-    Complexity.MEDIUM: ("gpt-4o-mini",      "openai"),
-    Complexity.HIGH:   (None, None),  # None = keep requested model
+    Complexity.LOW: ("gemini-2.0-flash", "gemini"),
+    Complexity.MEDIUM: ("gpt-4o-mini", "openai"),
+    Complexity.HIGH: (None, None),  # None = keep requested model
 }
 
 # ── Keyword Signals ───────────────────────────────────────────────────────────
 
 # Strong indicators of SIMPLE tasks
 _SIMPLE_KEYWORDS = {
-    "what is", "what are", "who is", "when did", "where is",
-    "define", "translate", "list", "summarize", "format",
-    "convert", "extract", "calculate", "count", "spell",
-    "yes or no", "true or false", "correct this",
+    "what is",
+    "what are",
+    "who is",
+    "when did",
+    "where is",
+    "define",
+    "translate",
+    "list",
+    "summarize",
+    "format",
+    "convert",
+    "extract",
+    "calculate",
+    "count",
+    "spell",
+    "yes or no",
+    "true or false",
+    "correct this",
 }
 
 # Strong indicators of COMPLEX tasks — these override simple signals
 _COMPLEX_KEYWORDS = {
-    "implement", "build", "architect", "design", "develop",
-    "debug", "refactor", "optimize", "analyze", "compare",
-    "evaluate", "explain in detail", "step by step",
-    "write a function", "write code", "create a system",
-    "multi-step", "reasoning", "prove", "derive",
+    "implement",
+    "build",
+    "architect",
+    "design",
+    "develop",
+    "debug",
+    "refactor",
+    "optimize",
+    "analyze",
+    "compare",
+    "evaluate",
+    "explain in detail",
+    "step by step",
+    "write a function",
+    "write code",
+    "create a system",
+    "multi-step",
+    "reasoning",
+    "prove",
+    "derive",
 }
 
 # Models considered "expensive" that we can potentially downgrade
 _EXPENSIVE_MODELS = {
-    "gpt-4o", "gpt-4", "gpt-4-turbo",
-    "gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro",
+    "gpt-4o",
+    "gpt-4",
+    "gpt-4-turbo",
+    "gemini-1.5-pro",
+    "gemini-1.0-pro",
+    "gemini-pro",
 }
 
 # Models already cheap — don't touch them
 _CHEAP_MODELS = {
-    "gpt-4o-mini", "gpt-3.5-turbo",
-    "gemini-2.0-flash", "gemini-1.5-flash",
+    "gpt-4o-mini",
+    "gpt-3.5-turbo",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
 }
 
 
 # ── Scoring Functions ─────────────────────────────────────────────────────────
+
 
 def _score_by_tokens(token_count: int) -> int:
     """
@@ -138,7 +176,10 @@ def _score_by_code_content(text: str) -> int:
 
 # ── Main Routing Logic ────────────────────────────────────────────────────────
 
-def analyze_complexity(messages: List[Dict], model: str) -> Tuple[Complexity, int, Dict]:
+
+def analyze_complexity(
+    messages: List[Dict], model: str
+) -> Tuple[Complexity, int, Dict]:
     """
     Analyze prompt complexity and return routing recommendation.
 
@@ -147,7 +188,9 @@ def analyze_complexity(messages: List[Dict], model: str) -> Tuple[Complexity, in
     """
     # Extract all text content for keyword analysis
     all_text = " ".join(m.get("content", "") for m in messages)
-    user_text = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+    user_text = " ".join(
+        m.get("content", "") for m in messages if m.get("role") == "user"
+    )
 
     token_count = count_tokens_in_messages(messages, model)
 
@@ -217,20 +260,29 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
 
     # Safety Check: If routing to Gemini but no Gemini API key is configured, fallback to OpenAI's cheap model
     if provider == "gemini":
-        gemini_missing = not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "your_gemini_api_key_here"
+        gemini_missing = (
+            not settings.GEMINI_API_KEY
+            or settings.GEMINI_API_KEY == "your_gemini_api_key_here"
+        )
         if gemini_missing:
             routed_model = "gpt-4o-mini"
 
     logger.info(
         "Routing analysis | requested=%s | complexity=%s | score=%d | breakdown=%s",
-        requested_model, complexity, score, breakdown,
+        requested_model,
+        complexity,
+        score,
+        breakdown,
     )
 
     # Only downgrade if task is simple/medium AND requested model is expensive
     if routed_model and requested_model in _EXPENSIVE_MODELS:
         logger.info(
             "Routing decision: %s → %s (complexity=%s, score=%d)",
-            requested_model, routed_model, complexity, score,
+            requested_model,
+            routed_model,
+            complexity,
+            score,
         )
         return {
             "model_used": routed_model,
@@ -244,7 +296,9 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
     # Keep original model for HIGH complexity
     logger.info(
         "No routing applied | model=%s | complexity=%s | score=%d",
-        requested_model, complexity, score,
+        requested_model,
+        complexity,
+        score,
     )
     return {
         "model_used": requested_model,
@@ -258,6 +312,7 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
 
 # ── Runtime Config ────────────────────────────────────────────────────────────
 
+
 def get_routing_config() -> Dict:
     """
     Returns the current routing configuration — models and score thresholds.
@@ -268,8 +323,8 @@ def get_routing_config() -> Dict:
             level.value: model for level, (model, _) in ROUTING_TABLE.items() if model
         },
         "score_thresholds": {
-            "low_max_score": 0,    # score <= 0 → LOW
-            "medium_max_score": 2, # score <= 2 → MEDIUM
+            "low_max_score": 0,  # score <= 0 → LOW
+            "medium_max_score": 2,  # score <= 2 → MEDIUM
         },
         "expensive_models": list(_EXPENSIVE_MODELS),
         "cheap_models": list(_CHEAP_MODELS),
@@ -304,4 +359,3 @@ def update_routing_config(
         logger.info("Routing config updated: MEDIUM → %s (%s)", medium_model, provider)
 
     return get_routing_config()
-

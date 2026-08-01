@@ -4,11 +4,13 @@ Uses Google's REST API (generateContent) and normalises the response
 into the same dict structure as the OpenAI client for provider-agnostic usage.
 """
 
-import httpx
+import logging
 import time
 import uuid
-import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
+import httpx
+
 from app.core.config import settings
 from app.services.token_counter import count_tokens_in_string
 
@@ -98,7 +100,9 @@ async def call_gemini(
 
     logger.info(
         "Gemini response | latency=%dms | tokens_in=%d | tokens_out=%d",
-        elapsed_ms, tokens_in, tokens_out,
+        elapsed_ms,
+        tokens_in,
+        tokens_out,
     )
 
     return {
@@ -111,3 +115,48 @@ async def call_gemini(
         "latency_ms": elapsed_ms,
         "provider": "gemini",
     }
+
+
+async def stream_gemini(
+    messages: List[Dict],
+    model: str,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+):
+    """
+    Streams Gemini generateContent API chunks.
+    Yields content delta text strings.
+    """
+    if not settings.GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY is not set in .env")
+
+    contents = _openai_messages_to_gemini(messages)
+    generation_config: Dict[str, Any] = {"temperature": temperature}
+    if max_tokens:
+        generation_config["maxOutputTokens"] = max_tokens
+
+    payload = {
+        "contents": contents,
+        "generationConfig": generation_config,
+    }
+
+    url = f"{GEMINI_API_BASE}/{model}:streamGenerateContent?alt=sse&key={settings.GEMINI_API_KEY}"
+    logger.info("Streaming Gemini | model=%s | turns=%d", model, len(contents))
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        async with client.stream("POST", url, json=payload) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data_str = line[6:].strip()
+                    try:
+                        import json
+
+                        chunk = json.loads(data_str)
+                        candidates = chunk.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts and "text" in parts[0]:
+                                yield parts[0]["text"]
+                    except Exception:
+                        continue

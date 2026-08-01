@@ -11,28 +11,30 @@ Reliability:
 
 import asyncio
 import logging
-import time
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from app.providers.openai_client import call_openai
-from app.providers.gemini_client import call_gemini
 from app.core.config import settings
+from app.providers.gemini_client import call_gemini, stream_gemini
+from app.providers.openai_client import call_openai, stream_openai
 from app.services.token_counter import count_tokens_in_messages
 
 logger = logging.getLogger("optillm.provider.dispatcher")
 
 # Models that route to Gemini
 _GEMINI_MODELS = {
-    "gemini-1.5-pro", "gemini-1.5-flash",
-    "gemini-2.0-flash", "gemini-1.0-pro", "gemini-pro",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.0-pro",
+    "gemini-pro",
 }
 
 _PLACEHOLDER_KEYS = {"your_openai_api_key_here", "your_gemini_api_key_here", "", None}
 
 # Retry config
 _MAX_RETRIES = 3
-_RETRY_BASE_DELAY = 1.0   # seconds — doubled on each attempt
+_RETRY_BASE_DELAY = 1.0  # seconds — doubled on each attempt
 
 
 def _detect_provider(model: str) -> str:
@@ -64,10 +66,12 @@ async def _mock_response(messages: List[Dict], model: str) -> Dict[str, Any]:
     without real API keys.
     """
     user_messages = [m for m in messages if m.get("role") == "user"]
-    last_user_msg = user_messages[-1].get("content", "Hello") if user_messages else "Hello"
+    last_user_msg = (
+        user_messages[-1].get("content", "Hello") if user_messages else "Hello"
+    )
 
     mock_answer = (
-        f"[MOCK] Simulated answer to: \"{last_user_msg[:80]}...\"\n\n"
+        f'[MOCK] Simulated answer to: "{last_user_msg[:80]}..."\n\n'
         f"In production with valid API keys, this would be a real response from {model}. "
         f"The OptiLLM optimization pipeline (cache, compression, routing) ran successfully."
     )
@@ -75,9 +79,14 @@ async def _mock_response(messages: List[Dict], model: str) -> Dict[str, Any]:
     tokens_in = count_tokens_in_messages(messages, model)
     tokens_out = len(mock_answer.split()) + 10
 
-    await asyncio.sleep(0.05)   # Simulate minimal latency
+    await asyncio.sleep(0.05)  # Simulate minimal latency
 
-    logger.info("MOCK RESPONSE | model=%s | tokens_in=%d | tokens_out=%d", model, tokens_in, tokens_out)
+    logger.info(
+        "MOCK RESPONSE | model=%s | tokens_in=%d | tokens_out=%d",
+        model,
+        tokens_in,
+        tokens_out,
+    )
 
     return {
         "id": f"mock-{uuid.uuid4().hex[:8]}",
@@ -113,13 +122,19 @@ async def _call_with_retry(
                 delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
                 logger.warning(
                     "Provider %s attempt %d/%d failed: %s — retrying in %.1fs",
-                    provider_label, attempt, _MAX_RETRIES, exc, delay,
+                    provider_label,
+                    attempt,
+                    _MAX_RETRIES,
+                    exc,
+                    delay,
                 )
                 await asyncio.sleep(delay)
             else:
                 logger.error(
                     "Provider %s failed after %d attempts: %s",
-                    provider_label, _MAX_RETRIES, exc,
+                    provider_label,
+                    _MAX_RETRIES,
+                    exc,
                 )
     raise last_exc
 
@@ -151,23 +166,45 @@ async def call_provider(
     # Primary attempt with retry
     try:
         if primary_provider == "gemini" and _gemini_available():
-            return await _call_with_retry(call_gemini, messages, model, temperature, max_tokens, "gemini")
+            return await _call_with_retry(
+                call_gemini, messages, model, temperature, max_tokens, "gemini"
+            )
         elif primary_provider == "openai" and _openai_available():
-            return await _call_with_retry(call_openai, messages, model, temperature, max_tokens, "openai")
+            return await _call_with_retry(
+                call_openai, messages, model, temperature, max_tokens, "openai"
+            )
     except Exception as primary_exc:
-        logger.warning("Primary provider (%s) failed: %s — attempting fallback.", primary_provider, primary_exc)
+        logger.warning(
+            "Primary provider (%s) failed: %s — attempting fallback.",
+            primary_provider,
+            primary_exc,
+        )
 
         # Fallback to the other provider
         if primary_provider == "gemini" and _openai_available():
-            fallback_model = "gpt-4o-mini"   # Use a capable but cheap fallback model
+            fallback_model = "gpt-4o-mini"  # Use a capable but cheap fallback model
             logger.info("Falling back to OpenAI | model=%s", fallback_model)
-            result = await _call_with_retry(call_openai, messages, fallback_model, temperature, max_tokens, "openai-fallback")
+            result = await _call_with_retry(
+                call_openai,
+                messages,
+                fallback_model,
+                temperature,
+                max_tokens,
+                "openai-fallback",
+            )
             result["provider"] = "openai-fallback"
             return result
         elif primary_provider == "openai" and _gemini_available():
             fallback_model = "gemini-2.0-flash"
             logger.info("Falling back to Gemini | model=%s", fallback_model)
-            result = await _call_with_retry(call_gemini, messages, fallback_model, temperature, max_tokens, "gemini-fallback")
+            result = await _call_with_retry(
+                call_gemini,
+                messages,
+                fallback_model,
+                temperature,
+                max_tokens,
+                "gemini-fallback",
+            )
             result["provider"] = "gemini-fallback"
             return result
         else:
@@ -178,3 +215,57 @@ async def call_provider(
         f"No available provider for model '{model}'. "
         "Check OPENAI_API_KEY and GEMINI_API_KEY in .env"
     )
+
+
+async def stream_provider(
+    messages: List[Dict],
+    model: str,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+):
+    """
+    Streams response tokens from the appropriate provider or mock generator.
+    Yields text delta chunks.
+    """
+    if _is_mock_mode():
+        user_messages = [m for m in messages if m.get("role") == "user"]
+        last_msg = (
+            user_messages[-1].get("content", "Hello") if user_messages else "Hello"
+        )
+        mock_tokens = [
+            "[MOCK] ",
+            "Simulated ",
+            "streamed ",
+            "response ",
+            "to: ",
+            f'"{last_msg[:40]}..."\n',
+            "OptiLLM ",
+            "stream ",
+            "pipeline ",
+            "working ",
+            "cleanly!",
+        ]
+        for token in mock_tokens:
+            await asyncio.sleep(0.02)
+            yield token
+        return
+
+    primary = _detect_provider(model)
+    if primary == "gemini" and _gemini_available():
+        async for chunk in stream_gemini(messages, model, temperature, max_tokens):
+            yield chunk
+    elif primary == "openai" and _openai_available():
+        async for chunk in stream_openai(messages, model, temperature, max_tokens):
+            yield chunk
+    elif _openai_available():
+        async for chunk in stream_openai(
+            messages, "gpt-4o-mini", temperature, max_tokens
+        ):
+            yield chunk
+    elif _gemini_available():
+        async for chunk in stream_gemini(
+            messages, "gemini-2.0-flash", temperature, max_tokens
+        ):
+            yield chunk
+    else:
+        raise ValueError("No available provider to stream.")

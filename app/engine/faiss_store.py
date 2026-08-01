@@ -13,11 +13,13 @@ Persistence:
   - Loaded from disk on startup (if exists)
 """
 
+import logging
 import os
+import threading
+
 import faiss
 import numpy as np
-import threading
-import logging
+
 from app.core.config import settings
 
 logger = logging.getLogger("optillm.engine.faiss_store")
@@ -165,7 +167,7 @@ def rebuild_from_entries(entries: list) -> int:
 
     logger.info(
         "FAISS index rebuilt from DB — %d vectors re-indexed (total=%d).",
-        vectors_added, new_index.ntotal,
+        vectors_added,
+        new_index.ntotal,
     )
     return vectors_added
-

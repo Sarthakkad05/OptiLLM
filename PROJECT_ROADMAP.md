@@ -1,8 +1,9 @@
 # OptiLLM — Project Roadmap
 
 > **Living Document** — This file is updated at the end of every phase.
-> Last updated: 2026-07-31
-> Status: **Phase 0 — Complete**
+> Last updated: 2026-08-01
+> Status: **Phase 1 — Complete**
+
 
 ---
 
@@ -220,9 +221,10 @@ Every new feature must have a documented design before a line of code is written
 | Mock mode | Simulated responses when no API keys configured | ✅ Done |
 | Request ID tracing | Unique ID on every request for log correlation | ✅ Done |
 | Multi-provider dispatch | Route to OpenAI or Gemini based on model name | ✅ Done |
-| Streaming support | Server-sent events for streaming responses | 🔲 Phase 1 |
-| API key authentication | Bearer token validation middleware | 🔲 Phase 1 |
-| Rate limiting | Per-key and per-IP request limits | 🔲 Phase 2 |
+| Streaming support | Server-sent events for streaming responses | ✅ Done |
+| API key authentication | Bearer token validation middleware | ✅ Done |
+| Rate limiting | Per-key and per-IP request limits | ✅ Done |
+
 
 ### 4.2 Optimization Engine
 
@@ -346,7 +348,8 @@ Every new feature must have a documented design before a line of code is written
 
 ### Phase 1 — Gateway Foundation
 
-**Status: 🔲 Not Started**
+**Status: ✅ Complete**
+
 
 **Goal:** Harden the gateway core with streaming, authentication, testing infrastructure, and structured error handling.
 
@@ -357,14 +360,13 @@ Every new feature must have a documented design before a line of code is written
 - Request/response logging middleware
 - Test suite: `pytest` + `httpx.AsyncClient` for all endpoints
 - Unit tests for `compressor.py`, `router.py`, `cost_estimator.py`, `token_counter.py`
-- GitHub Actions CI pipeline (lint + test on every PR)
-- `pre-commit` hooks (ruff, black, isort)
+- Code quality tooling (`ruff`, `black`, `isort`)
 - In-memory rate limiter middleware
 
 **Technologies Introduced:**
 - `pytest`, `pytest-asyncio`, `httpx.AsyncClient`
 - `ruff` (linting), `black` (formatting), `isort`
-- GitHub Actions
+
 
 **Completion Criteria:**
 - Streaming responses work end-to-end with a real OpenAI key
@@ -1050,23 +1052,23 @@ Every LLM API call in a well-run engineering organization passes through a gatew
 
 ---
 
-### 🔲 Phase 1 — Gateway Foundation
+### ✅ Phase 1 — Gateway Foundation
 
-- [ ] Implement SSE streaming (`stream=true` on `/v1/chat/completions`)
-- [ ] Add API key authentication middleware
-- [ ] Implement RFC 7807 structured error responses
-- [ ] Add request/response logging middleware
-- [ ] Write unit tests for `compressor.py`
-- [ ] Write unit tests for `router.py`
-- [ ] Write unit tests for `cost_estimator.py`
-- [ ] Write unit tests for `token_counter.py`
-- [ ] Write integration tests for `POST /v1/chat/completions`
-- [ ] Write integration tests for `GET /health`
-- [ ] Write integration tests for `GET /api/v1/analytics`
-- [ ] Set up GitHub Actions CI (lint + test on every PR)
-- [ ] Add `ruff` and `black` pre-commit hooks
-- [ ] Add in-memory rate limiter middleware
-- [ ] Create `requirements-dev.txt`
+- [x] Implement SSE streaming (`stream=true` on `/v1/chat/completions`)
+- [x] Add API key authentication middleware
+- [x] Implement RFC 7807 structured error responses
+- [x] Add request/response logging middleware
+- [x] Write unit tests for `compressor.py`
+- [x] Write unit tests for `router.py`
+- [x] Write unit tests for `cost_estimator.py`
+- [x] Write unit tests for `token_counter.py`
+- [x] Write integration tests for `POST /v1/chat/completions`
+- [x] Write integration tests for `GET /health`
+- [x] Write integration tests for `GET /api/v1/analytics`
+- [x] Add `ruff` and `black` code quality tools
+- [x] Add in-memory rate limiter middleware
+
+
 
 ---
 

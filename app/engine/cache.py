@@ -20,12 +20,13 @@ Threshold: 0.95 cosine similarity (very strict — prevents false positives)
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 from sqlalchemy.orm import Session
 
-from app.engine.embedding import generate_embedding, generate_embeddings_batch
-from app.engine import faiss_store
 from app.db.models import CacheEntry
+from app.engine import faiss_store
+from app.engine.embedding import generate_embedding, generate_embeddings_batch
 
 logger = logging.getLogger("optillm.engine.cache")
 
@@ -64,7 +65,9 @@ def sync_cache_on_startup(db: Session) -> None:
 
     This runs in ~200ms for 1,000 entries (batch embedding is fast).
     """
-    entries: List[CacheEntry] = db.query(CacheEntry).order_by(CacheEntry.faiss_index_id).all()
+    entries: List[CacheEntry] = (
+        db.query(CacheEntry).order_by(CacheEntry.faiss_index_id).all()
+    )
 
     if not entries:
         logger.info("Cache sync: DB is empty — fresh FAISS index ready.")
@@ -86,11 +89,14 @@ def sync_cache_on_startup(db: Session) -> None:
         faiss_store.rebuild_from_entries([])
         return
 
-    logger.info("Cache sync: re-embedding %d DB entries to rebuild FAISS index...", len(valid))
+    logger.info(
+        "Cache sync: re-embedding %d DB entries to rebuild FAISS index...", len(valid)
+    )
 
     # Batch embed all prompts (much faster than one-by-one)
     texts = [e.prompt_text for e in valid]
     import numpy as np
+
     vectors = generate_embeddings_batch(texts)  # shape (N, 384)
 
     # Build (faiss_id, vector_row) pairs
@@ -100,7 +106,9 @@ def sync_cache_on_startup(db: Session) -> None:
     ]
 
     rebuilt = faiss_store.rebuild_from_entries(pairs)
-    logger.info("Cache sync complete — %d vectors in FAISS, %d in DB.", rebuilt, len(entries))
+    logger.info(
+        "Cache sync complete — %d vectors in FAISS, %d in DB.", rebuilt, len(entries)
+    )
 
 
 def check_cache(messages: list, db: Session) -> Optional[Dict[str, Any]]:
@@ -123,7 +131,9 @@ def check_cache(messages: list, db: Session) -> Optional[Dict[str, Any]]:
     score = float(distances[0][0])
     faiss_id = int(indices[0][0])
 
-    logger.info("Cache search | score=%.4f | threshold=%.2f", score, SIMILARITY_THRESHOLD)
+    logger.info(
+        "Cache search | score=%.4f | threshold=%.2f", score, SIMILARITY_THRESHOLD
+    )
 
     if faiss_id == -1 or score < SIMILARITY_THRESHOLD:
         logger.info("Cache MISS (score=%.4f)", score)
@@ -135,7 +145,8 @@ def check_cache(messages: list, db: Session) -> Optional[Dict[str, Any]]:
         logger.warning(
             "FAISS hit (id=%d, score=%.4f) but no DB entry found — "
             "index may be stale. Run sync_cache_on_startup to fix.",
-            faiss_id, score,
+            faiss_id,
+            score,
         )
         return None
 
@@ -143,10 +154,16 @@ def check_cache(messages: list, db: Session) -> Optional[Dict[str, Any]]:
     if entry.expires_at is not None:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         if entry.expires_at < now:
-            logger.info("Cache MISS — entry %d is expired (expired_at=%s)", entry.id, entry.expires_at)
+            logger.info(
+                "Cache MISS — entry %d is expired (expired_at=%s)",
+                entry.id,
+                entry.expires_at,
+            )
             return None
 
-    logger.info("Cache HIT (score=%.4f | faiss_id=%d | model=%s)", score, faiss_id, entry.model)
+    logger.info(
+        "Cache HIT (score=%.4f | faiss_id=%d | model=%s)", score, faiss_id, entry.model
+    )
     return {
         "response_text": entry.response_text,
         "tokens_input": entry.tokens_input,
@@ -185,7 +202,10 @@ def insert_cache(
     expires_at = None
     if ttl_seconds is not None:
         from datetime import timedelta
-        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=ttl_seconds)
+
+        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+            seconds=ttl_seconds
+        )
 
     # Persist response + prompt_text to DB (prompt_text enables future FAISS rebuilds)
     entry = CacheEntry(
@@ -202,7 +222,10 @@ def insert_cache(
 
     logger.info(
         "Cache INSERT | faiss_id=%d | model=%s | tokens_in=%d | total_cached=%d%s",
-        faiss_id, model, tokens_input, faiss_store.total_vectors(),
+        faiss_id,
+        model,
+        tokens_input,
+        faiss_store.total_vectors(),
         f" | expires_at={expires_at}" if expires_at else "",
     )
 
@@ -224,10 +247,14 @@ def get_cache_stats(db: Session) -> Dict[str, Any]:
     """Returns semantic cache health metrics."""
     total_entries = db.query(CacheEntry).count()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    expired = db.query(CacheEntry).filter(
-        CacheEntry.expires_at.isnot(None),
-        CacheEntry.expires_at < now,
-    ).count()
+    expired = (
+        db.query(CacheEntry)
+        .filter(
+            CacheEntry.expires_at.isnot(None),
+            CacheEntry.expires_at < now,
+        )
+        .count()
+    )
 
     return {
         "total_cached_responses": total_entries,

@@ -1,10 +1,11 @@
-from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class RequestLogOut(BaseModel):
     """Schema for a single request log row returned to the client."""
+
     id: int
     timestamp: Optional[str]
     model_used: str
@@ -25,6 +26,7 @@ class RequestLogOut(BaseModel):
 
 class DashboardSummary(BaseModel):
     """Top-level KPI summary."""
+
     total_requests: int
     cache_hits: int
     cache_hit_rate: float
@@ -50,6 +52,7 @@ class ModelDistribution(BaseModel):
 
 class AnalyticsResponse(BaseModel):
     """Full analytics payload returned by GET /analytics."""
+
     summary: DashboardSummary
     cost_over_time: List[CostOverTime]
     model_distribution: List[ModelDistribution]

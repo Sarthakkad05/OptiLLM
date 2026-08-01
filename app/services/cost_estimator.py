@@ -8,25 +8,24 @@ Sources (approximate, update as needed):
   - Google:  https://ai.google.dev/pricing
 """
 
-from typing import Tuple
 import logging
+from typing import Tuple
 
 logger = logging.getLogger("optillm.cost_estimator")
 
 # Pricing: {model: (input_price_per_1M, output_price_per_1M)} in USD
 PRICING_TABLE: dict[str, Tuple[float, float]] = {
     # OpenAI
-    "gpt-4o":               (5.00,   15.00),
-    "gpt-4o-mini":          (0.15,    0.60),
-    "gpt-4":                (30.00,  60.00),
-    "gpt-4-turbo":          (10.00,  30.00),
-    "gpt-3.5-turbo":        (0.50,   1.50),
-
+    "gpt-4o": (5.00, 15.00),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4": (30.00, 60.00),
+    "gpt-4-turbo": (10.00, 30.00),
+    "gpt-3.5-turbo": (0.50, 1.50),
     # Google Gemini
-    "gemini-1.5-pro":       (3.50,   10.50),
-    "gemini-1.5-flash":     (0.35,    1.05),
-    "gemini-2.0-flash":     (0.10,    0.40),
-    "gemini-1.0-pro":       (0.50,   1.50),
+    "gemini-1.5-pro": (3.50, 10.50),
+    "gemini-1.5-flash": (0.35, 1.05),
+    "gemini-2.0-flash": (0.10, 0.40),
+    "gemini-1.0-pro": (0.50, 1.50),
 }
 
 # Default fallback when model is unknown
@@ -48,7 +47,9 @@ def get_model_pricing(model: str) -> Tuple[float, float]:
 def estimate_cost(model: str, tokens_input: int, tokens_output: int) -> float:
     """Calculate USD cost for a given model and token counts."""
     input_price, output_price = get_model_pricing(model)
-    cost = (tokens_input / 1_000_000) * input_price + (tokens_output / 1_000_000) * output_price
+    cost = (tokens_input / 1_000_000) * input_price + (
+        tokens_output / 1_000_000
+    ) * output_price
     return round(cost, 8)
 
 

@@ -4,9 +4,10 @@ Uses tiktoken to count tokens locally before sending to any provider.
 This avoids a round-trip just to know the token count.
 """
 
-import tiktoken
-from typing import List, Dict
 import logging
+from typing import Dict, List
+
+import tiktoken
 
 logger = logging.getLogger("optillm.token_counter")
 
@@ -16,7 +17,7 @@ _ENCODING_MAP = {
     "gpt-4": "cl100k_base",
     "gpt-4-turbo": "cl100k_base",
     "gpt-3.5-turbo": "cl100k_base",
-    "gemini-1.5-pro": "cl100k_base",    # Approximation — Gemini uses SentencePiece
+    "gemini-1.5-pro": "cl100k_base",  # Approximation — Gemini uses SentencePiece
     "gemini-1.5-flash": "cl100k_base",  # Approximation
     "gemini-2.0-flash": "cl100k_base",  # Approximation
 }

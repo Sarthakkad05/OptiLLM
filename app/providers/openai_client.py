@@ -4,11 +4,13 @@ Sends requests to the OpenAI Chat Completions API using httpx.
 Returns a normalised internal response dict.
 """
 
-import httpx
+import logging
 import time
 import uuid
-import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
+import httpx
+
 from app.core.config import settings
 
 logger = logging.getLogger("optillm.provider.openai")
@@ -73,3 +75,54 @@ async def call_openai(
         "latency_ms": elapsed_ms,
         "provider": "openai",
     }
+
+
+async def stream_openai(
+    messages: List[Dict],
+    model: str,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+):
+    """
+    Streams OpenAI response chunks via SSE.
+    Yields content delta text strings.
+    """
+    if not settings.OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY is not set in .env")
+
+    payload: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
+    }
+    if max_tokens:
+        payload["max_tokens"] = max_tokens
+
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    logger.info("Streaming OpenAI | model=%s | messages=%d", model, len(messages))
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        async with client.stream(
+            "POST", OPENAI_API_URL, json=payload, headers=headers
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data_str = line[6:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        import json
+
+                        chunk = json.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
+                    except Exception:
+                        continue

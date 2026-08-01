@@ -3,11 +3,12 @@ Pydantic schemas for the OpenAI-compatible chat completions endpoint.
 Mirrors the OpenAI API contract so existing clients work with zero changes.
 """
 
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Literal, Optional
 
+from pydantic import BaseModel, Field
 
 # ── Inbound Request ──────────────────────────────────────────────────────────
+
 
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"] = "user"
@@ -16,6 +17,7 @@ class ChatMessage(BaseModel):
 
 class OptiLLMConfig(BaseModel):
     """Optional block clients can include to control OptiLLM behaviour."""
+
     bypass_cache: bool = False
     bypass_compression: bool = False
     bypass_routing: bool = False
@@ -26,11 +28,12 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = None
-    stream: Optional[bool] = False         # Streaming not supported in MVP
+    stream: Optional[bool] = False  # Streaming not supported in MVP
     optillm: Optional[OptiLLMConfig] = OptiLLMConfig()
 
 
 # ── Outbound Response ─────────────────────────────────────────────────────────
+
 
 class UsageInfo(BaseModel):
     prompt_tokens: int
@@ -51,6 +54,7 @@ class Choice(BaseModel):
 
 class OptiLLMMetadata(BaseModel):
     """Extra optimisation metadata appended to every response."""
+
     cache_hit: bool
     compressed: bool
     routed: bool
@@ -64,6 +68,7 @@ class OptiLLMMetadata(BaseModel):
     complexity: Optional[str] = None
 
     model_config = {"protected_namespaces": ()}
+
 
 class ChatCompletionResponse(BaseModel):
     id: str

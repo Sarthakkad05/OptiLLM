@@ -3,11 +3,13 @@ Analytics Service
 Aggregates request logs for the dashboard and API endpoints.
 """
 
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Dict, Any
-from app.db.models import RequestLog
 import logging
+from typing import Any, Dict, List
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.db.models import RequestLog
 
 logger = logging.getLogger("optillm.analytics")
 
@@ -15,7 +17,13 @@ logger = logging.getLogger("optillm.analytics")
 def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     """Top-level KPI summary for the dashboard."""
     total = db.query(func.count(RequestLog.id)).scalar() or 0
-    cache_hits = db.query(func.count(RequestLog.id)).filter(RequestLog.cache_hit == True).scalar() or 0  # noqa: E712
+    cache_hits = (
+        db.query(func.count(RequestLog.id))
+        .filter(RequestLog.cache_hit.is_(True))
+        .scalar()
+        or 0
+    )
+
     total_cost = db.query(func.sum(RequestLog.cost_usd)).scalar() or 0.0
     total_savings = db.query(func.sum(RequestLog.savings_usd)).scalar() or 0.0
     total_tokens_saved = db.query(func.sum(RequestLog.tokens_saved)).scalar() or 0
@@ -40,12 +48,7 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
 
 def get_recent_requests(db: Session, limit: int = 50) -> List[Dict[str, Any]]:
     """Fetch the most recent requests for the dashboard table."""
-    rows = (
-        db.query(RequestLog)
-        .order_by(RequestLog.timestamp.desc())
-        .limit(limit)
-        .all()
-    )
+    rows = db.query(RequestLog).order_by(RequestLog.timestamp.desc()).limit(limit).all()
     return [
         {
             "id": r.id,
