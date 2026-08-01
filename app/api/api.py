@@ -7,6 +7,7 @@ from app.api.endpoints import (
     prompts,
     providers,
     proxy,
+    tools,
     workflows,
 )
 
@@ -18,4 +19,5 @@ api_router.include_router(providers.router, prefix="/api/v1/providers")
 api_router.include_router(budgets.router, prefix="/api/v1/budgets")
 api_router.include_router(prompts.router, prefix="/api/v1/prompts")
 api_router.include_router(workflows.router, prefix="/api/v1/workflows")
+api_router.include_router(tools.router, prefix="/api/v1/tools")
 api_router.include_router(proxy.router)

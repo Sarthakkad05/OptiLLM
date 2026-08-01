@@ -85,3 +85,21 @@ class KeyBudget(Base):
 
     last_reset_day = Column(String(10), nullable=True)  # YYYY-MM-DD
     last_reset_month = Column(String(7), nullable=True)  # YYYY-MM
+
+
+class ToolAuditLog(Base):
+    """
+    Audit log table recording tool execution traces, execution duration, and outcomes.
+    """
+
+    __tablename__ = "tool_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, server_default=func.now(), index=True)
+
+    tool_name = Column(String(100), nullable=False, index=True)
+    arguments = Column(Text, nullable=True)  # JSON serialized arguments
+    execution_time_ms = Column(Float, default=0.0)
+    success = Column(Boolean, default=True, index=True)
+    result_summary = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)

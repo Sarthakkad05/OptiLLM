@@ -2,7 +2,8 @@
 
 > **Living Document** — This file is updated at the end of every phase.
 > Last updated: 2026-08-01
-> Status: **Phase 8 — Complete**
+> Status: **Phase 9 — Complete**
+
 
 
 
@@ -621,7 +622,8 @@ Receive Request
 
 ### Phase 9 — Tool Calling
 
-**Status: 🔲 Not Started**
+**Status: ✅ Complete**
+
 
 **Goal:** Give routing and optimization decisions access to real-time information via a structured tool calling system.
 
@@ -1177,13 +1179,14 @@ Every LLM API call in a well-run engineering organization passes through a gatew
 
 ---
 
-### 🔲 Phase 9 — Tool Calling
+### ✅ Phase 9 — Tool Calling
 
-- [ ] Tool registry
-- [ ] Tool execution sandbox
-- [ ] Core gateway tools implemented
-- [ ] `GET /api/v1/tools`
-- [ ] Tool call audit log
+- [x] Tool registry
+- [x] Tool execution sandbox
+- [x] Core gateway tools implemented
+- [x] `GET /api/v1/tools`
+- [x] Tool call audit log
+
 
 ---
 
