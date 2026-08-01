@@ -1,46 +1,37 @@
 """
-Semantic Cache Service
-Orchestrates embedding generation, FAISS similarity search, and DB response storage.
+Semantic Cache Service.
+Orchestrates distributed Redis vector similarity lookup, FAISS fallback, and DB storage.
 
 Workflow:
-  CHECK:   text → embedding → FAISS search → if score >= threshold → fetch from DB
-  INSERT:  text → embedding → FAISS add → store response + prompt_text in DB
-
-Startup Sync:
-  sync_cache_on_startup(db) rebuilds the FAISS index from DB entries.
-  This fixes the FAISS↔DB ID drift bug that caused all cache lookups to miss
-  after a server restart.
-
-TTL:
-  Cache entries can have an optional expires_at timestamp.
-  Expired entries are treated as misses (but not deleted — use /api/v1/cache/clear).
-
-Threshold: 0.95 cosine similarity (very strict — prevents false positives)
+  CHECK:   text → embedding → Redis lookup → if miss → FAISS search → if miss → LLM
+  INSERT:  text → embedding → FAISS add → store in DB → insert into Redis with TTL & Namespace
 """
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.models import CacheEntry
 from app.engine import faiss_store
 from app.engine.embedding import generate_embedding, generate_embeddings_batch
+from app.engine.redis_cache import (
+    clear_redis_cache,
+    insert_redis_cache,
+    is_redis_available,
+    lookup_redis_cache,
+)
 
 logger = logging.getLogger("optillm.engine.cache")
 
-# Cosine similarity threshold for a cache hit.
-# 0.95 means vectors must overlap in 95% of their semantic space.
-SIMILARITY_THRESHOLD = 0.95
+SIMILARITY_THRESHOLD = settings.CACHE_SIMILARITY_THRESHOLD
 
 
 def _extract_lookup_text(messages: list) -> str:
-    """
-    Extract the text used for cache lookup.
-    We use only the last user message for embedding — this is the semantic intent.
-    System prompts are excluded to allow the same question across different contexts.
-    """
+    """Extract semantic intent text (last user message)."""
     user_messages = [m for m in messages if m.get("role") == "user"]
     if not user_messages:
         return " ".join(m.get("content", "") for m in messages)
@@ -48,23 +39,7 @@ def _extract_lookup_text(messages: list) -> str:
 
 
 def sync_cache_on_startup(db: Session) -> None:
-    """
-    Synchronise the FAISS index with the DB on every startup.
-
-    Problem being solved:
-        FAISS persists its index to disk. The DB persists CacheEntry rows.
-        Both use sequential integer IDs. After a DB reset, migration, or partial
-        failure, the IDs drift — a FAISS hit returns an ID that has no matching
-        DB row, causing every cache lookup to fall through to a miss.
-
-    Solution:
-        1. Load all CacheEntry rows from DB (including prompt_text).
-        2. Batch-embed all prompt texts.
-        3. Atomically rebuild a fresh FAISS index from those embeddings.
-        4. Save to disk. FAISS and DB are now in sync.
-
-    This runs in ~200ms for 1,000 entries (batch embedding is fast).
-    """
+    """Synchronises FAISS index and Redis with DB cache entries on startup."""
     entries: List[CacheEntry] = (
         db.query(CacheEntry).order_by(CacheEntry.faiss_index_id).all()
     )
@@ -74,102 +49,92 @@ def sync_cache_on_startup(db: Session) -> None:
         faiss_store.rebuild_from_entries([])
         return
 
-    # Filter out entries with no prompt_text (legacy rows from before this fix)
     valid = [e for e in entries if e.prompt_text and e.prompt_text.strip()]
-    skipped = len(entries) - len(valid)
-
-    if skipped:
-        logger.warning(
-            "Cache sync: %d entries have no prompt_text (pre-fix legacy rows) — they will be skipped.",
-            skipped,
-        )
-
     if not valid:
-        logger.warning("Cache sync: no valid entries to re-index. Resetting FAISS.")
         faiss_store.rebuild_from_entries([])
         return
 
-    logger.info(
-        "Cache sync: re-embedding %d DB entries to rebuild FAISS index...", len(valid)
-    )
-
-    # Batch embed all prompts (much faster than one-by-one)
+    logger.info("Cache sync: re-indexing %d DB entries...", len(valid))
     texts = [e.prompt_text for e in valid]
     import numpy as np
 
-    vectors = generate_embeddings_batch(texts)  # shape (N, 384)
+    vectors = generate_embeddings_batch(texts)
 
-    # Build (faiss_id, vector_row) pairs
     pairs = [
         (e.faiss_index_id, vectors[i : i + 1].astype(np.float32))
         for i, e in enumerate(valid)
     ]
 
     rebuilt = faiss_store.rebuild_from_entries(pairs)
-    logger.info(
-        "Cache sync complete — %d vectors in FAISS, %d in DB.", rebuilt, len(entries)
-    )
+
+    # Populates Redis if connected
+    if is_redis_available():
+        for i, e in enumerate(valid):
+            insert_redis_cache(
+                entry_id=str(e.faiss_index_id),
+                prompt_text=e.prompt_text,
+                query_embedding=vectors[i],
+                response_text=e.response_text,
+                model=e.model,
+                tokens_input=e.tokens_input,
+                tokens_output=e.tokens_output,
+            )
+
+    logger.info("Cache sync complete — %d entries in FAISS/Redis.", rebuilt)
 
 
-def check_cache(messages: list, db: Session) -> Optional[Dict[str, Any]]:
+def check_cache(
+    messages: list, db: Session, namespace: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     """
-    Check if a semantically similar prompt exists in cache.
-
-    Returns:
-        Dict with response_text, tokens_input, tokens_output, model if hit.
-        None if cache miss (including expired entries).
+    Check if a semantically similar prompt exists in distributed Redis or FAISS cache.
     """
     lookup_text = _extract_lookup_text(messages)
     if not lookup_text.strip():
         return None
 
-    # Generate normalized embedding
+    # Generate normalized 384d embedding
     vector = generate_embedding(lookup_text)
 
-    # Search FAISS for nearest neighbor
+    # 1. Distributed Redis Cache Lookup
+    redis_match = lookup_redis_cache(
+        query_embedding=vector, threshold=SIMILARITY_THRESHOLD, namespace=namespace
+    )
+    if redis_match:
+        return {
+            "response_text": redis_match["response_text"],
+            "tokens_input": redis_match["tokens_input"],
+            "tokens_output": redis_match["tokens_output"],
+            "model": redis_match["model"],
+            "similarity_score": redis_match["similarity"],
+            "source": "redis",
+        }
+
+    # 2. Local FAISS Fallback Search
     distances, indices = faiss_store.search(vector, k=1)
     score = float(distances[0][0])
     faiss_id = int(indices[0][0])
 
-    logger.info(
-        "Cache search | score=%.4f | threshold=%.2f", score, SIMILARITY_THRESHOLD
-    )
-
     if faiss_id == -1 or score < SIMILARITY_THRESHOLD:
-        logger.info("Cache MISS (score=%.4f)", score)
         return None
 
-    # Fetch cached response from DB
     entry = db.query(CacheEntry).filter(CacheEntry.faiss_index_id == faiss_id).first()
     if not entry:
-        logger.warning(
-            "FAISS hit (id=%d, score=%.4f) but no DB entry found — "
-            "index may be stale. Run sync_cache_on_startup to fix.",
-            faiss_id,
-            score,
-        )
         return None
 
-    # TTL check — treat expired entries as misses
     if entry.expires_at is not None:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         if entry.expires_at < now:
-            logger.info(
-                "Cache MISS — entry %d is expired (expired_at=%s)",
-                entry.id,
-                entry.expires_at,
-            )
             return None
 
-    logger.info(
-        "Cache HIT (score=%.4f | faiss_id=%d | model=%s)", score, faiss_id, entry.model
-    )
+    logger.info("FAISS CACHE HIT (score=%.4f | faiss_id=%d)", score, faiss_id)
     return {
         "response_text": entry.response_text,
         "tokens_input": entry.tokens_input,
         "tokens_output": entry.tokens_output,
         "model": entry.model,
         "similarity_score": score,
+        "source": "faiss",
     }
 
 
@@ -180,37 +145,33 @@ def insert_cache(
     tokens_input: int,
     tokens_output: int,
     db: Session,
+    namespace: Optional[str] = None,
     ttl_seconds: Optional[int] = None,
 ) -> None:
     """
-    Insert a new prompt-response pair into the semantic cache.
-
-    Args:
-        ttl_seconds: If set, the cache entry expires after this many seconds.
-                     None = never expires.
+    Inserts prompt-response pair into FAISS, DB, and distributed Redis cache.
     """
     lookup_text = _extract_lookup_text(messages)
     if not lookup_text.strip():
-        logger.warning("Empty lookup text — skipping cache insertion.")
         return
 
-    # Generate embedding and add to FAISS
     vector = generate_embedding(lookup_text)
     faiss_id = faiss_store.add(vector)
+    entry_uuid = uuid.uuid4().hex[:12]
 
-    # Calculate expiry
+    ttl = ttl_seconds if ttl_seconds is not None else settings.CACHE_TTL_SECONDS
     expires_at = None
-    if ttl_seconds is not None:
+    if ttl > 0:
         from datetime import timedelta
 
         expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
-            seconds=ttl_seconds
+            seconds=ttl
         )
 
-    # Persist response + prompt_text to DB (prompt_text enables future FAISS rebuilds)
+    # 1. Insert into DB & FAISS
     entry = CacheEntry(
         faiss_index_id=faiss_id,
-        prompt_text=lookup_text[:2000],  # cap at 2000 chars — enough for re-embedding
+        prompt_text=lookup_text[:2000],
         response_text=response_text,
         model=model,
         tokens_input=tokens_input,
@@ -220,31 +181,43 @@ def insert_cache(
     db.add(entry)
     db.commit()
 
+    # 2. Dual-write to Redis Cache
+    insert_redis_cache(
+        entry_id=entry_uuid,
+        prompt_text=lookup_text[:2000],
+        query_embedding=vector,
+        response_text=response_text,
+        model=model,
+        tokens_input=tokens_input,
+        tokens_output=tokens_output,
+        namespace=namespace,
+        ttl_seconds=ttl,
+    )
+
     logger.info(
-        "Cache INSERT | faiss_id=%d | model=%s | tokens_in=%d | total_cached=%d%s",
-        faiss_id,
-        model,
-        tokens_input,
-        faiss_store.total_vectors(),
-        f" | expires_at={expires_at}" if expires_at else "",
+        "Cache INSERT complete | faiss_id=%d | model=%s | ttl=%ds", faiss_id, model, ttl
     )
 
 
-def clear_cache(db: Session) -> int:
-    """
-    Wipe all cache entries from DB and reset the FAISS index.
-    Returns the number of entries deleted.
-    """
+def warm_cache(db: Session, namespace: Optional[str] = None) -> int:
+    """Pre-loads all DB cache entries into Redis and FAISS vector index."""
+    sync_cache_on_startup(db)
+    return db.query(CacheEntry).count()
+
+
+def clear_cache(db: Session, namespace: Optional[str] = None) -> int:
+    """Wipe all cache entries from DB, FAISS, and Redis."""
     count = db.query(CacheEntry).count()
     db.query(CacheEntry).delete()
     db.commit()
     faiss_store.reset_index()
-    logger.info("Cache cleared — %d entries deleted.", count)
+    clear_redis_cache(namespace=namespace)
+    logger.info("Cache cleared — %d entries removed from DB/FAISS/Redis.", count)
     return count
 
 
 def get_cache_stats(db: Session) -> Dict[str, Any]:
-    """Returns semantic cache health metrics."""
+    """Returns semantic cache health metrics across DB, FAISS, and Redis."""
     total_entries = db.query(CacheEntry).count()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     expired = (
@@ -262,4 +235,8 @@ def get_cache_stats(db: Session) -> Dict[str, Any]:
         "active_entries": total_entries - expired,
         "faiss_vector_count": faiss_store.total_vectors(),
         "similarity_threshold": SIMILARITY_THRESHOLD,
+        "redis_available": is_redis_available(),
+        "redis_url": settings.REDIS_URL or "not_configured",
+        "cache_namespace": settings.CACHE_NAMESPACE,
+        "cache_ttl_seconds": settings.CACHE_TTL_SECONDS,
     }

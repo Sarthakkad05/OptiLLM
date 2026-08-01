@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import RequestLog
 from app.db.session import get_db
-from app.engine.cache import clear_cache, get_cache_stats
+from app.engine.cache import clear_cache, get_cache_stats, warm_cache
 from app.engine.router import ROUTING_TABLE, get_routing_config, update_routing_config
 from app.schemas.analytics import (
     AnalyticsResponse,
@@ -222,12 +222,34 @@ def get_routing_stats(db: Session = Depends(get_db)):
 # ── Cache Management ───────────────────────────────────────────────────────────
 
 
+@router.get("/cache/info", tags=["Cache"])
+def get_cache_info_endpoint(db: Session = Depends(get_db)):
+    """Returns detailed cache health, configuration, and connectivity status."""
+    return get_cache_stats(db)
+
+
+@router.post("/cache/warm", tags=["Cache"])
+def warm_cache_endpoint(
+    namespace: Optional[str] = Query(None), db: Session = Depends(get_db)
+):
+    """
+    Pre-loads DB cache entries into Redis and FAISS vector index.
+    """
+    count = warm_cache(db, namespace=namespace)
+    return {
+        "warmed_entries": count,
+        "message": f"Cache warm complete — {count} entries loaded into Redis/FAISS.",
+    }
+
+
 @router.delete("/cache/clear", tags=["Cache"])
-def clear_cache_endpoint(db: Session = Depends(get_db)):
+def clear_cache_endpoint(
+    namespace: Optional[str] = Query(None), db: Session = Depends(get_db)
+):
     """
-    Wipe all semantic cache entries and reset the FAISS index.
+    Wipe all semantic cache entries from DB, FAISS, and Redis.
     """
-    deleted = clear_cache(db)
+    deleted = clear_cache(db, namespace=namespace)
     return {
         "deleted_entries": deleted,
         "message": f"Cache cleared — {deleted} entries removed.",

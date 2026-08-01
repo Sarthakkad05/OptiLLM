@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     )
     CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
     CIRCUIT_BREAKER_RECOVERY_TIME: float = 30.0
-    HEALTH_CHECK_INTERVAL_SECONDS: float = 60.0
+    # Distributed Cache Settings
+    REDIS_URL: str = ""  # e.g., redis://localhost:6379/0
+    CACHE_TTL_SECONDS: int = 86400  # 24 hours
+    CACHE_NAMESPACE: str = "default"
+    CACHE_SIMILARITY_THRESHOLD: float = 0.90
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
