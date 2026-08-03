@@ -295,3 +295,81 @@ def get_savings_breakdown(
         "routing_savings_usd": round(float(routing_savings), 6),
         "total_savings_usd": round(float(total_savings), 6),
     }
+
+
+def get_quality_analytics(
+    db: Session,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    provider: Optional[str] = None,
+    tag: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Aggregates response quality ratings, 5-dimension averages, hallucination risks,
+    cost-efficiency scores, and model quality rankings.
+    """
+    base_query = db.query(RequestLog)
+    base_query = _apply_filters(base_query, start_date, end_date, provider=provider, tag=tag)
+
+    eval_query = base_query.filter(RequestLog.quality_score.isnot(None))
+    total_eval = eval_query.count()
+
+    if total_eval == 0:
+        return {
+            "total_evaluated_requests": 0,
+            "avg_quality_score": 0.0,
+            "avg_hallucination_score": 0.0,
+            "avg_efficiency_score": 0.0,
+            "dimension_averages": {
+                "correctness": 0.0,
+                "relevance": 0.0,
+                "completeness": 0.0,
+            },
+            "model_quality_breakdown": [],
+            "quality_over_time": [],
+        }
+
+    avg_qual = eval_query.with_entities(func.avg(RequestLog.quality_score)).scalar() or 0.0
+    avg_hall = eval_query.with_entities(func.avg(RequestLog.hallucination_score)).scalar() or 0.0
+    avg_eff = eval_query.with_entities(func.avg(RequestLog.efficiency_score)).scalar() or 0.0
+
+    avg_corr = eval_query.with_entities(func.avg(RequestLog.correctness_score)).scalar() or 0.0
+    avg_rel = eval_query.with_entities(func.avg(RequestLog.relevance_score)).scalar() or 0.0
+    avg_comp = eval_query.with_entities(func.avg(RequestLog.completeness_score)).scalar() or 0.0
+
+    # Per-model breakdown
+    model_stats = (
+        eval_query.with_entities(
+            RequestLog.model_used,
+            func.count(RequestLog.id).label("count"),
+            func.avg(RequestLog.quality_score).label("avg_quality"),
+            func.avg(RequestLog.efficiency_score).label("avg_efficiency"),
+        )
+        .group_by(RequestLog.model_used)
+        .all()
+    )
+
+    breakdown = [
+        {
+            "model": row.model_used,
+            "eval_count": row.count,
+            "avg_quality_score": round(float(row.avg_quality or 0.0), 4),
+            "avg_efficiency_score": round(float(row.avg_efficiency or 0.0), 2),
+        }
+        for row in model_stats
+    ]
+
+    return {
+        "total_evaluated_requests": total_eval,
+        "avg_quality_score": round(float(avg_qual), 4),
+        "avg_hallucination_score": round(float(avg_hall), 4),
+        "avg_efficiency_score": round(float(avg_eff), 2),
+        "dimension_averages": {
+            "correctness": round(float(avg_corr), 4),
+            "relevance": round(float(avg_rel), 4),
+            "completeness": round(float(avg_comp), 4),
+        },
+        "model_quality_breakdown": breakdown,
+        "quality_over_time": [],
+    }
+

@@ -80,3 +80,17 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+@app.get("/metrics", include_in_schema=True, tags=["Observability"])
+def get_prometheus_metrics():
+    """
+    Exposes live Prometheus metrics for scraping by Prometheus server.
+    """
+    from fastapi.responses import Response
+
+    from app.core.metrics import render_metrics
+
+    body, content_type = render_metrics()
+    return Response(content=body, media_type=content_type)
+

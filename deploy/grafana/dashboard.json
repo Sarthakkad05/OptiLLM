@@ -1,0 +1,64 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "OptiLLM Request Rate (RPS)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(optillm_http_requests_total[1m])",
+          "legendFormat": "{{endpoint}} ({{status_code}})"
+        }
+      ]
+    },
+    {
+      "title": "Latency Percentiles (p50 / p95 / p99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(optillm_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(optillm_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(optillm_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "Cumulative Cost Savings ($ USD)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "optillm_cost_savings_usd_total",
+          "legendFormat": "Total Saved"
+        }
+      ]
+    },
+    {
+      "title": "Semantic Cache Hit Rate",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "sum(rate(optillm_cache_hits_total[5m])) / (sum(rate(optillm_cache_hits_total[5m])) + sum(rate(optillm_cache_misses_total[5m])))",
+          "legendFormat": "Hit Rate"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["optillm", "llm-gateway"],
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "OptiLLM Gateway Production Observability"
+}

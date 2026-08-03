@@ -20,7 +20,9 @@ build/
 # Runtime data (generated at server startup — do not commit)
 *.db
 *.sqlite
+*.joblib
 faiss_store/
+
 
 # macOS
 .DS_Store

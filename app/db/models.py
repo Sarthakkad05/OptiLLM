@@ -42,6 +42,17 @@ class RequestLog(Base):
     # Snippet for dashboard display (first 200 chars of prompt)
     prompt_snippet = Column(String(200), nullable=True)
 
+    # Evaluation & Quality Engine (Phase 11)
+    quality_score = Column(Float, nullable=True)
+    correctness_score = Column(Float, nullable=True)
+    relevance_score = Column(Float, nullable=True)
+    completeness_score = Column(Float, nullable=True)
+    hallucination_score = Column(Float, nullable=True)
+    efficiency_score = Column(Float, nullable=True)
+
+    # Multi-tenancy (Phase 14)
+    tenant_id = Column(String(100), default="default", index=True)
+
 
 class CacheEntry(Base):
     """
@@ -65,6 +76,7 @@ class CacheEntry(Base):
 
     # TTL: if set, cache entry expires after this timestamp
     expires_at = Column(DateTime, nullable=True)
+    tenant_id = Column(String(100), default="default", index=True)
 
 
 class KeyBudget(Base):
@@ -85,6 +97,7 @@ class KeyBudget(Base):
 
     last_reset_day = Column(String(10), nullable=True)  # YYYY-MM-DD
     last_reset_month = Column(String(7), nullable=True)  # YYYY-MM
+    tenant_id = Column(String(100), default="default", index=True)
 
 
 class ToolAuditLog(Base):
@@ -103,3 +116,40 @@ class ToolAuditLog(Base):
     success = Column(Boolean, default=True, index=True)
     result_summary = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    tenant_id = Column(String(100), default="default", index=True)
+
+
+class Tenant(Base):
+    """
+    Enterprise Tenant entity.
+    """
+
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    api_key = Column(String(200), nullable=False, unique=True)
+    role = Column(String(50), default="developer", index=True)  # admin | developer | read_only
+    sla_target_ms = Column(Float, default=500.0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class AuditLogEntry(Base):
+    """
+    Immutable & tamper-evident enterprise audit log table.
+    Uses cryptographic SHA256 chain linking (prev_hash -> payload_hash).
+    """
+
+    __tablename__ = "audit_log_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, server_default=func.now(), index=True)
+    tenant_id = Column(String(100), default="default", index=True)
+    actor = Column(String(100), nullable=False)
+    action = Column(String(100), nullable=False, index=True)
+    resource = Column(String(200), nullable=False)
+    payload_hash = Column(String(64), nullable=False)
+    prev_hash = Column(String(64), nullable=False)
+    status = Column(String(50), default="success")
+

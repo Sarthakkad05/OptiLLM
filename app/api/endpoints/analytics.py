@@ -17,7 +17,9 @@ from app.schemas.analytics import (
     SavingsBreakdownResponse,
     TokenTrendsResponse,
 )
+from app.schemas.evaluation import QualityAnalyticsResponse
 from app.services import analytics as analytics_service
+
 
 router = APIRouter()
 
@@ -256,29 +258,31 @@ def clear_cache_endpoint(
     }
 
 
-# ── Router Configuration ───────────────────────────────────────────────────────
+# ── Phase 11 Quality Analytics ────────────────────────────────────────────────
 
 
-class RouterConfigUpdate(BaseModel):
-    low_model: Optional[str] = None
-    medium_model: Optional[str] = None
-    low_score_threshold: Optional[int] = None
-    medium_score_threshold: Optional[int] = None
-
-
-@router.get("/router/config", tags=["Router"])
-def get_router_config():
-    """Returns the current model routing configuration."""
-    return get_routing_config()
-
-
-@router.post("/router/config", tags=["Router"])
-def update_router_config(update: RouterConfigUpdate):
+@router.get(
+    "/analytics/quality",
+    response_model=QualityAnalyticsResponse,
+    tags=["Analytics"],
+)
+def get_quality_analytics_endpoint(
+    start_date: Optional[str] = Query(None, description="Start date filter"),
+    end_date: Optional[str] = Query(None, description="End date filter"),
+    provider: Optional[str] = Query(None, description="Provider filter"),
+    tag: Optional[str] = Query(None, description="Tag filter"),
+    db: Session = Depends(get_db),
+):
     """
-    Update the model routing table at runtime — no restart required.
+    Returns quality analytics, 5-dimension averages, hallucination metrics, and model quality ratings.
     """
-    changes = update.model_dump(exclude_none=True)
-    if not changes:
-        raise HTTPException(status_code=400, detail="No changes provided.")
-    updated = update_routing_config(**changes)
-    return {"message": "Routing config updated.", "new_config": updated}
+    start_dt = _parse_datetime(start_date)
+    end_dt = _parse_datetime(end_date)
+    return analytics_service.get_quality_analytics(
+        db, start_date=start_dt, end_date=end_dt, provider=provider, tag=tag
+    )
+
+
+
+
+

@@ -39,7 +39,19 @@ class Settings(BaseSettings):
     CACHE_NAMESPACE: str = "default"
     CACHE_SIMILARITY_THRESHOLD: float = 0.90
 
+    # AI Router & Intelligent Routing (Phase 10)
+    ROUTING_MODE: str = "shadow"  # rule_based | ai | shadow
+    AI_ROUTER_CONFIDENCE_THRESHOLD: float = 0.70
+    AI_ROUTER_MODEL_PATH: str = "ai_router.joblib"
+
+    # RAG Support (Phase 12)
+    QDRANT_URL: str = ":memory:"
+    RAG_DEFAULT_CHUNK_SIZE: int = 500
+    RAG_DEFAULT_CHUNK_OVERLAP: int = 50
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
 
 
 settings = Settings()

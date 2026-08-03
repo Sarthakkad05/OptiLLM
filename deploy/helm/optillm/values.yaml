@@ -1,0 +1,30 @@
+replicaCount: 2
+
+image:
+  repository: optillm/gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+env:
+  APP_ENV: production
+  LOG_LEVEL: INFO
+  ROUTING_STRATEGY: cost_optimized
+  ROUTING_MODE: shadow
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
