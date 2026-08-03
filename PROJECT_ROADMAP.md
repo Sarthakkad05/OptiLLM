@@ -828,7 +828,7 @@ Receive Request
 
 ### Phase 17 — MCP Agent Tool Router & Output Caching
 
-**Status: ⏳ Planned**
+**Status: ✅ Complete**
 
 **Goal:** Intercept and optimize AI Agent tool calls (Model Context Protocol / MCP) connecting to GitHub, Slack, databases, and web APIs with output semantic caching and audit logging.
 
@@ -1368,12 +1368,12 @@ Every LLM API call in a well-run engineering organization passes through a gatew
 
 ---
 
-### ⏳ Phase 17 — MCP Agent Tool Router & Output Caching
+### ✅ Phase 17 — MCP Agent Tool Router & Output Caching
 
-- [ ] MCP tool gateway router (`/api/v1/mcp/proxy`)
-- [ ] Tool output semantic caching & TTL invalidation
-- [ ] Tool execution audit logging & latency metrics
-- [ ] Tool access control groups & key permissions
+- [x] MCP tool gateway router (`POST /api/v1/mcp/proxy`, `GET /api/v1/mcp/servers`, `DELETE /api/v1/mcp/cache/clear`)
+- [x] Tool output semantic caching & TTL invalidation
+- [x] Tool execution audit logging & latency metrics
+- [x] Tool access control groups & key permissions (`test_phase17_mcp_router.py`)
 
 
 ---

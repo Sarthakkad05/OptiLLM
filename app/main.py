@@ -30,6 +30,20 @@ async def lifespan(app: FastAPI):
 
     # Ensure all DB tables exist (idempotent — safe to run on every start)
     Base.metadata.create_all(bind=engine)
+
+    # Idempotent migration guard for local dev SQLite databases
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for col_stmt in [
+            "ALTER TABLE cache_entries ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+            "ALTER TABLE request_logs ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+        ]:
+            try:
+                conn.execute(text(col_stmt))
+                conn.commit()
+            except Exception:
+                pass
+
     logger.info("✅ Database tables ready.")
 
     # Preload embedding model and FAISS index to avoid cold-start on first request

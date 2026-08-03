@@ -20,6 +20,21 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Ensure missing columns exist in SQLite local dev DB
+if _is_sqlite:
+    from sqlalchemy import text
+
+    with engine.connect() as _conn:
+        for _stmt in [
+            "ALTER TABLE cache_entries ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+            "ALTER TABLE request_logs ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+        ]:
+            try:
+                _conn.execute(text(_stmt))
+                _conn.commit()
+            except Exception:
+                pass
+
 
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency — yields a DB session per request."""
