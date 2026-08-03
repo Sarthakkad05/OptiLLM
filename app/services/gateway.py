@@ -42,6 +42,10 @@ async def process_request(
     bypass_cache: bool = False,
     bypass_compression: bool = False,
     bypass_routing: bool = False,
+    cache_threshold: Optional[float] = None,
+    cache_namespace: Optional[str] = None,
+    ttl_seconds: Optional[int] = None,
+    compression_mode: str = "smart",
     db: Session = None,
     tag: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -59,12 +63,21 @@ async def process_request(
     # Pre-count original input tokens
     original_tokens_in = count_tokens_in_messages(messages, model)
     logger.info(
-        "[%s] Request | model=%s | tokens=%d", request_id, model, original_tokens_in
+        "[%s] Request | model=%s | tokens=%d | ns=%s",
+        request_id,
+        model,
+        original_tokens_in,
+        cache_namespace or "default",
     )
 
     # ── Semantic Cache Check ──────────────────────────────────────────────────
     if not bypass_cache:
-        cache_result = check_cache(messages, db)
+        cache_result = check_cache(
+            messages,
+            db,
+            namespace=cache_namespace,
+            similarity_threshold=cache_threshold,
+        )
         if cache_result:
             cached_tokens_in = cache_result["tokens_input"]
             cached_tokens_out = cache_result["tokens_output"]
@@ -132,14 +145,17 @@ async def process_request(
     messages_to_send = messages
 
     if not bypass_compression:
-        messages_to_send, compression_stats = compress(messages, model=model)
+        messages_to_send, compression_stats = compress(
+            messages, model=model, mode=compression_mode
+        )
         if compression_stats["was_compressed"]:
             logger.info(
-                "[%s] COMPRESSED | %d → %d tokens (%.1f%% reduction)",
+                "[%s] COMPRESSED | %d → %d tokens (%.1f%% reduction, mode=%s)",
                 request_id,
                 compression_stats["original_tokens"],
                 compression_stats["compressed_tokens"],
                 compression_stats["compression_ratio"] * 100,
+                compression_mode,
             )
 
     # ── Model Routing ─────────────────────────────────────────────────────────
@@ -208,6 +224,8 @@ async def process_request(
             tokens_input=tokens_in,
             tokens_output=tokens_out,
             db=db,
+            namespace=cache_namespace,
+            ttl_seconds=ttl_seconds,
         )
 
     # ── Persist RequestLog ───────────────────────────────────────────────────

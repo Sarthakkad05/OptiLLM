@@ -166,6 +166,7 @@ def compress(
     messages: List[Dict],
     model: str = "gpt-4o",
     max_tokens: int = MAX_TOKENS_THRESHOLD,
+    mode: str = "smart",
 ) -> Tuple[List[Dict], Dict[str, Any]]:
     """
     Run the full compression pipeline on a messages list.
@@ -174,44 +175,56 @@ def compress(
         messages: OpenAI-format messages list
         model: Model name (used for token counting)
         max_tokens: Token threshold above which compression is applied
+        mode: "smart" (code/schema safe), "aggressive" (max savings), or "minimal" (cleaning only)
 
     Returns:
         (compressed_messages, stats)
-
-        stats = {
-            "original_tokens": int,
-            "compressed_tokens": int,
-            "tokens_saved": int,
-            "was_compressed": bool,
-            "compression_ratio": float,
-        }
     """
     original_tokens = count_tokens_in_messages(messages, model)
 
-    # Always run cleaning pass & deduplication pass
     cleaned = _clean_messages(messages)
     from app.engine.prompt_optimizer import deduplicate_messages, summarize_conversation
 
     cleaned, _ = deduplicate_messages(cleaned)
+
+    if mode == "minimal":
+        compressed_tokens = count_tokens_in_messages(cleaned, model)
+        tokens_saved = max(0, original_tokens - compressed_tokens)
+        return cleaned, {
+            "original_tokens": original_tokens,
+            "compressed_tokens": compressed_tokens,
+            "tokens_saved": tokens_saved,
+            "was_compressed": tokens_saved > 0,
+            "compression_ratio": (
+                round(1.0 - (compressed_tokens / original_tokens), 4)
+                if original_tokens > 0
+                else 0.0
+            ),
+        }
+
+    effective_max_tokens = max_tokens
+    if mode == "aggressive":
+        effective_max_tokens = min(max_tokens, 1000)
+
     cleaned, _ = summarize_conversation(cleaned, max_turns=8)
 
     was_compressed = False
     final_messages = cleaned
 
-    if original_tokens > max_tokens:
-
+    if original_tokens > effective_max_tokens:
         logger.info(
-            "Compression triggered | original=%d tokens | threshold=%d",
+            "Compression triggered | original=%d tokens | threshold=%d | mode=%s",
             original_tokens,
-            max_tokens,
+            effective_max_tokens,
+            mode,
         )
         was_compressed = True
-        final_messages = _truncate_messages(cleaned, max_tokens, model)
+        final_messages = _truncate_messages(cleaned, effective_max_tokens, model)
     else:
         logger.debug(
             "No truncation needed | original=%d tokens (threshold=%d)",
             original_tokens,
-            max_tokens,
+            effective_max_tokens,
         )
 
     compressed_tokens = count_tokens_in_messages(final_messages, model)

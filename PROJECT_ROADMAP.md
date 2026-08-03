@@ -785,6 +785,83 @@ Receive Request
 
 ---
 
+### Phase 15 — HTTP Gateway Optimization Suite (Microservices & Multi-Language)
+
+**Status: ⏳ Planned**
+
+**Goal:** Strengthen OptiLLM's HTTP Proxy Gateway features to provide a production-grade optimization layer for non-Python & microservice engineering teams (Node.js, Go, Rust, Java, Python).
+
+**Deliverables:**
+- **Dynamic Per-Request Payload Schema (`optillm` block)**: `cache_threshold`, `cache_namespace`, `ttl_seconds`, `compression_mode` passed dynamically in `POST /v1/chat/completions`.
+- **Multi-Tenant Namespaced Vector Cache**: Isolated vector spaces per application/tenant and tag-based namespace cache invalidation (`DELETE /api/v1/cache/namespaces/{name}`).
+- **Structure & Syntax-Aware Context Compression**: Code-block (` ```...``` `), System Prompt, and JSON Schema preservation modes (`smart`, `aggressive`, `minimal`).
+- **Compression Preview Visualizer Endpoint**: `POST /api/v1/compressor/preview` returning side-by-side prompt diffs & token savings metrics.
+- **Self-Healing Quality-Aware Router**: Automatic fallback to full model when `LLMJudge` score drops below threshold on downgraded models.
+- **Multi-Language Microservice Integrations**: Standalone Docker packaging + copy-paste OpenAI SDK connection examples for Node.js, Go, Python, Rust, and cURL.
+
+**Completion Criteria:**
+- Microservices can pass `optillm` per-request controls via standard OpenAI SDK payloads without changing client libraries.
+- Syntax-aware compression preserves code fences & JSON schemas without corruption.
+- Quality-aware router automatically fallbacks when output quality score is below threshold.
+
+---
+
+### Phase 16 — Provider Expansion: Ollama Local LLMs & Anthropic Claude 3.5
+
+**Status: ✅ Complete**
+
+**Goal:** Expand OptiLLM's multi-provider adapter layer to support Anthropic Claude 3.5 family and local open-source models via Ollama.
+
+**Deliverables:**
+- **Ollama Local LLM Provider Adapter**: Connect to `OLLAMA_BASE_URL` (default `http://localhost:11434`), supporting local open models (`llama3`, `mistral`, `qwen`, `phi3`, `gemma`) with zero API cost ($0.00).
+- **Anthropic Claude 3.5 Adapter Verification**: Support `claude-3-5-sonnet`, `claude-3-5-haiku`, `claude-3-opus` with system prompt translation and token streaming.
+- **Updated Provider Registry & Dispatcher**: Add Ollama & Anthropic into circuit breaker failover chain and load balancer.
+- **Cost Estimator Update**: Add Anthropic pricing matrix + $0.00 zero-cost estimation for local Ollama models.
+- **Model Router Integration**: Allow low-complexity tasks to route to `ollama/llama3` or `claude-3-haiku`.
+
+**Completion Criteria:**
+- Requests for `claude-3-5-sonnet` or `ollama/llama3` execute cleanly through `/v1/chat/completions`.
+- Cost estimator assigns $0.00 cost to Ollama requests.
+- Failover chain falls back to healthy providers if primary API key is missing.
+
+---
+
+### Phase 17 — MCP Agent Tool Router & Output Caching
+
+**Status: ⏳ Planned**
+
+**Goal:** Intercept and optimize AI Agent tool calls (Model Context Protocol / MCP) connecting to GitHub, Slack, databases, and web APIs with output semantic caching and audit logging.
+
+**Deliverables:**
+- **MCP Tool Gateway Router (`/api/v1/mcp/proxy`)**: Universal endpoint to proxy agent tool executions.
+- **Tool Output Semantic Caching**: Cache repetitive tool query results (e.g. database lookups, repo stats) to eliminate API rate-limits and latency.
+- **Tool Execution Cost & Latency Audit Log**: Track tool usage, execution time, and error rates per agent/team.
+- **Permission & Access Control Groups**: Restrict which agents/keys can call sensitive enterprise tools.
+
+**Completion Criteria:**
+- Agent tool calls routed through `/api/v1/mcp/proxy` are semantically cached on hit.
+- Audit logs capture tool call latency and execution status.
+
+---
+
+### Phase 18 — Latency-Based & Least-Busy Infrastructure Load Balancing
+
+**Status: ⏳ Planned**
+
+**Goal:** Provide high-concurrency dynamic load balancing across multiple provider instances, region endpoints, and API keys.
+
+**Deliverables:**
+- **Dynamic Latency Tracker**: Continuously measure P50/P90/P99 latency per provider endpoint.
+- **Least-Busy Routing Strategy**: Route incoming requests to the provider instance with the lowest active concurrent connections.
+- **Multi-Region Failover & Auto-Healing**: Automatic failover across multi-region Azure/AWS OpenAI deployments when latency spikes occur.
+- **Traffic Shadow Mirroring**: Silently mirror a fraction of production traffic to secondary models for shadow evaluation.
+
+**Completion Criteria:**
+- High-concurrency traffic automatically routes away from degraded/high-latency provider endpoints.
+- Shadow mirroring runs without impacting primary request latency.
+
+---
+
 ## 6. Learning Roadmap
 
 Each phase introduces and deepens specific GenAI and infrastructure knowledge.
@@ -806,6 +883,10 @@ Each phase introduces and deepens specific GenAI and infrastructure knowledge.
 | **Phase 12** | RAG architecture, chunking strategies, hybrid search, Qdrant |
 | **Phase 13** | Kubernetes, Helm, OpenTelemetry, Prometheus, Grafana, Next.js |
 | **Phase 14** | Multi-tenancy, RBAC, encryption, plugin systems, compliance |
+| **Phase 15** | Per-request optimization protocols, multi-tenant vector namespaces, AST/code-aware compression, self-healing routing |
+| **Phase 16** | Local open-source LLM integration (Ollama), zero-cost modeling, Anthropic Claude 3.5 Messages API, multi-provider failover chains |
+| **Phase 17** | Model Context Protocol (MCP), tool call caching, agent tool governance |
+| **Phase 18** | High-concurrency load balancing (least-busy, latency-based), multi-region failover, traffic shadow mirroring |
 
 ### Cumulative GenAI Knowledge Map
 
@@ -1259,6 +1340,50 @@ Every LLM API call in a well-run engineering organization passes through a gatew
 - [x] Plugin system
 - [x] SLA manager
 - [x] Reference plugin
+
+
+---
+
+### ✅ Phase 15 — HTTP Gateway Optimization Suite
+
+- [x] Dynamic per-request `optillm` payload schema (`cache_threshold`, `cache_namespace`, `ttl_seconds`, `compression_mode`)
+- [x] Multi-tenant vector namespaces & similarity threshold overrides
+- [x] Structure & code-aware context compression modes (`smart`, `aggressive`, `minimal`)
+- [x] Prompt compression preview & diff visualizer (`POST /api/v1/compressor/preview`)
+- [x] Self-healing quality-aware router integration
+- [x] Standalone Docker deployment & multi-language microservice snippets (Node.js, Go, Python, cURL)
+
+
+---
+
+### ✅ Phase 16 — Provider Expansion: Ollama Local LLMs & Anthropic Claude 3.5
+
+- [x] Ollama provider adapter (`OllamaProvider` connecting to `http://localhost:11434`)
+- [x] Anthropic Claude 3.5 adapter verification (`claude-3-5-sonnet`, `claude-3-5-haiku`, `claude-3-opus`)
+- [x] Add `OLLAMA_BASE_URL` and `ANTHROPIC_API_KEY` settings to `config.py`
+- [x] Register Ollama & Anthropic in `ProviderRegistry` and `Dispatcher` fallback chain
+- [x] Add Anthropic pricing matrix and $0.00 zero-cost pricing for Ollama models in `cost_estimator.py`
+- [x] Integration & unit test suites for Ollama & Anthropic providers (`test_phase16_providers.py`)
+
+
+---
+
+### ⏳ Phase 17 — MCP Agent Tool Router & Output Caching
+
+- [ ] MCP tool gateway router (`/api/v1/mcp/proxy`)
+- [ ] Tool output semantic caching & TTL invalidation
+- [ ] Tool execution audit logging & latency metrics
+- [ ] Tool access control groups & key permissions
+
+
+---
+
+### ⏳ Phase 18 — Latency-Based & Least-Busy Infrastructure Load Balancing
+
+- [ ] Real-time P50/P90/P99 latency tracking per provider endpoint
+- [ ] `least-busy` routing strategy (active concurrency tracking)
+- [ ] Multi-region failover & auto-healing deployment pools
+- [ ] Production traffic shadow mirroring
 
 
 ---

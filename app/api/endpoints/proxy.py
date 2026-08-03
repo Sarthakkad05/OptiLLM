@@ -60,6 +60,10 @@ async def chat_completions(
     bypass_cache = getattr(config, "bypass_cache", False)
     bypass_compression = getattr(config, "bypass_compression", False)
     bypass_routing = getattr(config, "bypass_routing", False)
+    cache_threshold = getattr(config, "cache_threshold", None)
+    cache_namespace = getattr(config, "cache_namespace", "default")
+    ttl_seconds = getattr(config, "ttl_seconds", None)
+    compression_mode = getattr(config, "compression_mode", "smart") or "smart"
 
     # Pre-flight Budget Check
     allowed, predicted_cost, reason = check_budget_and_predict(
@@ -94,6 +98,10 @@ async def chat_completions(
             bypass_cache=bypass_cache,
             bypass_compression=bypass_compression,
             bypass_routing=bypass_routing,
+            cache_threshold=cache_threshold,
+            cache_namespace=cache_namespace,
+            ttl_seconds=ttl_seconds,
+            compression_mode=compression_mode,
             db=db,
             tag=x_optillm_tag,
         )

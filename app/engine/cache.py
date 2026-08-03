@@ -84,7 +84,10 @@ def sync_cache_on_startup(db: Session) -> None:
 
 
 def check_cache(
-    messages: list, db: Session, namespace: Optional[str] = None
+    messages: list,
+    db: Session,
+    namespace: Optional[str] = None,
+    similarity_threshold: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Check if a semantically similar prompt exists in distributed Redis or FAISS cache.
@@ -93,12 +96,16 @@ def check_cache(
     if not lookup_text.strip():
         return None
 
+    threshold = (
+        similarity_threshold if similarity_threshold is not None else SIMILARITY_THRESHOLD
+    )
+
     # Generate normalized 384d embedding
     vector = generate_embedding(lookup_text)
 
     # 1. Distributed Redis Cache Lookup
     redis_match = lookup_redis_cache(
-        query_embedding=vector, threshold=SIMILARITY_THRESHOLD, namespace=namespace
+        query_embedding=vector, threshold=threshold, namespace=namespace
     )
     if redis_match:
         return {
@@ -115,7 +122,7 @@ def check_cache(
     score = float(distances[0][0])
     faiss_id = int(indices[0][0])
 
-    if faiss_id == -1 or score < SIMILARITY_THRESHOLD:
+    if faiss_id == -1 or score < threshold:
         return None
 
     entry = db.query(CacheEntry).filter(CacheEntry.faiss_index_id == faiss_id).first()

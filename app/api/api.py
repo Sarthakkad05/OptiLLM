@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.endpoints import (
     analytics,
     budgets,
+    compression_preview,
     enterprise,
     evaluation,
     health,
@@ -19,6 +20,7 @@ api_router = APIRouter()
 
 api_router.include_router(health.router)
 api_router.include_router(analytics.router, prefix="/api/v1")
+api_router.include_router(compression_preview.router, prefix="/api/v1")
 api_router.include_router(providers.router, prefix="/api/v1/providers")
 api_router.include_router(router_config.router, prefix="/api/v1")
 api_router.include_router(evaluation.router, prefix="/api/v1")

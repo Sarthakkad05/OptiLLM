@@ -26,6 +26,21 @@ PRICING_TABLE: dict[str, Tuple[float, float]] = {
     "gemini-1.5-flash": (0.35, 1.05),
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-1.0-pro": (0.50, 1.50),
+    # Anthropic
+    "claude-3-5-sonnet": (3.00, 15.00),
+    "claude-3-5-haiku": (0.80, 4.00),
+    "claude-3-opus": (15.00, 75.00),
+    "claude-3-sonnet": (3.00, 15.00),
+    "claude-3-haiku": (0.25, 1.25),
+    # Ollama (Local Open Source LLMs — $0 API cost)
+    "ollama": (0.00, 0.00),
+    "llama3": (0.00, 0.00),
+    "llama3.1": (0.00, 0.00),
+    "llama3.2": (0.00, 0.00),
+    "mistral": (0.00, 0.00),
+    "qwen": (0.00, 0.00),
+    "phi3": (0.00, 0.00),
+    "gemma": (0.00, 0.00),
 }
 
 # Default fallback when model is unknown

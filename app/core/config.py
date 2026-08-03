@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
     DEFAULT_PROVIDER: str = "openai"
     DEFAULT_MODEL: str = "gpt-4o"
     REQUEST_TIMEOUT_SECONDS: float = 60.0
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     API_KEY_AUTH_ENABLED: bool = False
     OPTILLM_API_KEYS: str = "sk-optillm-dev-key"  # Comma-separated allowed keys
     RATE_LIMIT_PER_MINUTE: int = 60
-    ALLOWED_PROVIDERS: str = "openai,gemini,anthropic"
+    ALLOWED_PROVIDERS: str = "openai,gemini,anthropic,ollama"
     ALLOWED_MODELS: str = "*"
     # High Availability & Routing Strategies
     ROUTING_STRATEGY: str = (

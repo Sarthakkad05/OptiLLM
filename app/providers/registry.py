@@ -49,14 +49,16 @@ provider_registry = ProviderRegistry()
 
 
 def _init_default_providers():
-    """Import and register default providers (OpenAI, Gemini, Anthropic)."""
+    """Import and register default providers (OpenAI, Gemini, Anthropic, Ollama)."""
     from app.providers.anthropic_client import anthropic_provider
     from app.providers.gemini_client import gemini_provider
+    from app.providers.ollama_client import ollama_provider
     from app.providers.openai_client import openai_provider
 
     provider_registry.register(openai_provider)
     provider_registry.register(gemini_provider)
     provider_registry.register(anthropic_provider)
+    provider_registry.register(ollama_provider)
 
 
 _init_default_providers()

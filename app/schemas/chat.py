@@ -21,6 +21,10 @@ class OptiLLMConfig(BaseModel):
     bypass_cache: bool = False
     bypass_compression: bool = False
     bypass_routing: bool = False
+    cache_threshold: Optional[float] = None
+    cache_namespace: Optional[str] = "default"
+    ttl_seconds: Optional[int] = None
+    compression_mode: Optional[Literal["smart", "aggressive", "minimal"]] = "smart"
 
 
 class ChatCompletionRequest(BaseModel):
