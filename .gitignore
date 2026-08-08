@@ -31,3 +31,11 @@ faiss_store/
 .idea/
 .vscode/
 *.swp
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Next.js
+.next/
+**/.next/

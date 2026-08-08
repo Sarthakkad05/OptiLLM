@@ -16,6 +16,11 @@ from app.core.config import settings
 from app.providers.base import BaseProvider
 from app.services.token_counter import count_tokens_in_string
 
+# Cache Ollama reachability result to avoid checking on every request
+_ollama_available_cache: Optional[bool] = None
+_ollama_last_check: float = 0.0
+_OLLAMA_CHECK_INTERVAL = 30.0  # re-check every 30 seconds
+
 logger = logging.getLogger("optillm.provider.ollama")
 
 _OLLAMA_MODELS = {
@@ -39,7 +44,33 @@ class OllamaProvider(BaseProvider):
         return "ollama"
 
     def is_available(self) -> bool:
-        return bool(settings.OLLAMA_BASE_URL)
+        """Returns True only if Ollama server is reachable at configured URL."""
+        global _ollama_available_cache, _ollama_last_check
+
+        if not settings.OLLAMA_BASE_URL:
+            return False
+
+        now = time.time()
+        if (
+            _ollama_available_cache is not None
+            and now - _ollama_last_check < _OLLAMA_CHECK_INTERVAL
+        ):
+            return _ollama_available_cache
+
+        try:
+            base_url = settings.OLLAMA_BASE_URL.rstrip("/")
+            resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
+            _ollama_available_cache = resp.status_code == 200
+        except Exception:
+            _ollama_available_cache = False
+
+        _ollama_last_check = now
+        if not _ollama_available_cache:
+            logger.debug(
+                "Ollama server not reachable at %s — marking unavailable.",
+                settings.OLLAMA_BASE_URL,
+            )
+        return _ollama_available_cache
 
     def supports_model(self, model: str) -> bool:
         model_lower = model.lower()

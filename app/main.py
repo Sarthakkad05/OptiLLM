@@ -35,8 +35,17 @@ async def lifespan(app: FastAPI):
     from sqlalchemy import text
     with engine.connect() as conn:
         for col_stmt in [
+            "ALTER TABLE cache_entries ADD COLUMN expires_at DATETIME",
             "ALTER TABLE cache_entries ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+            "ALTER TABLE request_logs ADD COLUMN tag VARCHAR(100)",
+            "ALTER TABLE request_logs ADD COLUMN quality_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN correctness_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN relevance_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN completeness_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN hallucination_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN efficiency_score FLOAT",
             "ALTER TABLE request_logs ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+            "ALTER TABLE key_budgets ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
         ]:
             try:
                 conn.execute(text(col_stmt))
@@ -84,10 +93,13 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # Middlewares
+cors_origins = [
+    origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()
+]
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins if cors_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -107,4 +119,19 @@ def get_prometheus_metrics():
 
     body, content_type = render_metrics()
     return Response(content=body, media_type=content_type)
+
+
+@app.get("/playground", include_in_schema=True, tags=["Playground"])
+def get_playground_ui():
+    """
+    Renders the interactive OptiLLM Gateway API Playground UI.
+    """
+    from pathlib import Path
+    from fastapi.responses import HTMLResponse
+
+    html_path = Path(__file__).parent / "static" / "playground.html"
+    if html_path.exists():
+        return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Playground UI file not found</h1>", status_code=404)
+
 

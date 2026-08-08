@@ -26,14 +26,24 @@ if _is_sqlite:
 
     with engine.connect() as _conn:
         for _stmt in [
+            "ALTER TABLE cache_entries ADD COLUMN expires_at DATETIME",
             "ALTER TABLE cache_entries ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+            "ALTER TABLE request_logs ADD COLUMN tag VARCHAR(100)",
+            "ALTER TABLE request_logs ADD COLUMN quality_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN correctness_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN relevance_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN completeness_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN hallucination_score FLOAT",
+            "ALTER TABLE request_logs ADD COLUMN efficiency_score FLOAT",
             "ALTER TABLE request_logs ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
+            "ALTER TABLE key_budgets ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
         ]:
             try:
                 _conn.execute(text(_stmt))
                 _conn.commit()
             except Exception:
                 pass
+
 
 
 def get_db() -> Generator[Session, None, None]:

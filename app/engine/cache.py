@@ -125,8 +125,22 @@ def check_cache(
     if faiss_id == -1 or score < threshold:
         return None
 
-    entry = db.query(CacheEntry).filter(CacheEntry.faiss_index_id == faiss_id).first()
+    # Namespace-aware DB lookup — prevent cross-tenant cache leakage
+    effective_namespace = namespace or settings.CACHE_NAMESPACE or "default"
+    entry_query = db.query(CacheEntry).filter(CacheEntry.faiss_index_id == faiss_id)
+
+    # Filter by namespace via tenant_id column for isolation
+    if effective_namespace != "*":
+        entry_query = entry_query.filter(CacheEntry.tenant_id == effective_namespace)
+
+    entry = entry_query.first()
     if not entry:
+        logger.debug(
+            "FAISS hit (faiss_id=%d score=%.4f) but no DB entry in namespace '%s' — skipping.",
+            faiss_id,
+            score,
+            effective_namespace,
+        )
         return None
 
     if entry.expires_at is not None:
@@ -134,7 +148,12 @@ def check_cache(
         if entry.expires_at < now:
             return None
 
-    logger.info("FAISS CACHE HIT (score=%.4f | faiss_id=%d)", score, faiss_id)
+    logger.info(
+        "FAISS CACHE HIT (score=%.4f | faiss_id=%d | namespace=%s)",
+        score,
+        faiss_id,
+        effective_namespace,
+    )
     return {
         "response_text": entry.response_text,
         "tokens_input": entry.tokens_input,
@@ -176,6 +195,7 @@ def insert_cache(
         )
 
     # 1. Insert into DB & FAISS
+    effective_namespace = namespace or settings.CACHE_NAMESPACE or "default"
     entry = CacheEntry(
         faiss_index_id=faiss_id,
         prompt_text=lookup_text[:2000],
@@ -184,6 +204,7 @@ def insert_cache(
         tokens_input=tokens_input,
         tokens_output=tokens_output,
         expires_at=expires_at,
+        tenant_id=effective_namespace,
     )
     db.add(entry)
     db.commit()

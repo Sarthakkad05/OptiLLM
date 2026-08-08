@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     API_KEY_AUTH_ENABLED: bool = False
     OPTILLM_API_KEYS: str = "sk-optillm-dev-key"  # Comma-separated allowed keys
     RATE_LIMIT_PER_MINUTE: int = 60
+    CORS_ORIGINS: str = "*"  # Comma-separated list of allowed origins or "*"
     ALLOWED_PROVIDERS: str = "openai,gemini,anthropic,ollama"
     ALLOWED_MODELS: str = "*"
     # High Availability & Routing Strategies

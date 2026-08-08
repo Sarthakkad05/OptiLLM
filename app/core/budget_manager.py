@@ -5,7 +5,7 @@ Enforces per-key daily and monthly spend limits to prevent budget overruns.
 
 import logging
 from datetime import datetime, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -22,14 +22,23 @@ def _get_current_date_tags() -> Tuple[str, str]:
     return now.strftime("%Y-%m-%d"), now.strftime("%Y-%m")
 
 
-def get_or_create_budget(api_key: str, db: Session) -> KeyBudget:
-    """Fetches or creates a KeyBudget row for the given API key."""
-    budget = db.query(KeyBudget).filter(KeyBudget.api_key == api_key).first()
+def get_or_create_budget(
+    api_key: str,
+    db: Session,
+    tenant_id: str = "default",
+) -> KeyBudget:
+    """Fetches or creates a KeyBudget row for the given API key and tenant."""
+    budget = (
+        db.query(KeyBudget)
+        .filter(KeyBudget.api_key == api_key, KeyBudget.tenant_id == tenant_id)
+        .first()
+    )
     today, month = _get_current_date_tags()
 
     if not budget:
         budget = KeyBudget(
             api_key=api_key,
+            tenant_id=tenant_id,
             daily_budget_usd=10.0,
             monthly_budget_usd=100.0,
             daily_spent_usd=0.0,
@@ -63,12 +72,13 @@ def check_budget_and_predict(
     messages: list,
     db: Session,
     predicted_output_tokens: int = 150,
+    tenant_id: str = "default",
 ) -> Tuple[bool, float, str]:
     """
     Pre-flight check predicting request cost and verifying against daily/monthly caps.
     Returns (is_allowed, predicted_cost_usd, reason).
     """
-    budget = get_or_create_budget(api_key=api_key, db=db)
+    budget = get_or_create_budget(api_key=api_key, db=db, tenant_id=tenant_id)
 
     # 1. Pre-flight cost prediction
     tokens_in = count_tokens_in_messages(messages, model)
@@ -99,9 +109,14 @@ def check_budget_and_predict(
     return True, predicted_cost, "Budget check passed."
 
 
-def record_spend(api_key: str, cost_usd: float, db: Session) -> KeyBudget:
-    """Updates daily & monthly spent amounts for the given API key."""
-    budget = get_or_create_budget(api_key=api_key, db=db)
+def record_spend(
+    api_key: str,
+    cost_usd: float,
+    db: Session,
+    tenant_id: str = "default",
+) -> KeyBudget:
+    """Updates daily & monthly spent amounts for the given API key and tenant."""
+    budget = get_or_create_budget(api_key=api_key, db=db, tenant_id=tenant_id)
     budget.daily_spent_usd = round(budget.daily_spent_usd + cost_usd, 6)
     budget.monthly_spent_usd = round(budget.monthly_spent_usd + cost_usd, 6)
 

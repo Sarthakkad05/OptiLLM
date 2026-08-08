@@ -1,0 +1,184 @@
+name: OptiLLM CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ── Lint & Format Check ────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linting tools
+        run: pip install ruff==0.3.0 black==24.2.0 isort==5.13.2
+
+      - name: Run ruff (linting)
+        run: ruff check app/ tests/ optillm_client/ --output-format=github
+
+      - name: Run black (formatting check)
+        run: black --check app/ tests/ optillm_client/
+
+  # ── Type Checking ──────────────────────────────────────────────────────────
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install mypy types-requests
+
+      - name: Run mypy (core modules)
+        run: mypy app/core/ app/providers/ app/services/ --ignore-missing-imports --no-strict-optional
+        continue-on-error: true  # Non-blocking for now; enable strict mode gradually
+
+  # ── Unit & Integration Tests ───────────────────────────────────────────────
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create test .env
+        run: |
+          cat > .env << 'EOF'
+          DATABASE_URL=sqlite:///./test_optillm.db
+          APP_ENV=testing
+          API_KEY_AUTH_ENABLED=false
+          OPTILLM_API_KEYS=sk-test-key
+          OPENAI_API_KEY=
+          GEMINI_API_KEY=
+          ANTHROPIC_API_KEY=
+          REDIS_URL=
+          EOF
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ \
+            --tb=short \
+            -q \
+            --junit-xml=test-results.xml \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing:skip-covered
+        env:
+          DATABASE_URL: sqlite:///./test_optillm.db
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: test-results.xml
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+
+  # ── Security Check ─────────────────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Run bandit security scan
+        run: |
+          bandit -r app/ \
+            -x app/core/tool_sandbox.py \
+            --severity-level medium \
+            -f txt \
+            --exit-zero
+        continue-on-error: true  # Report but don't block
+
+  # ── Docker Build ───────────────────────────────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: optillm:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test container health
+        run: |
+          # Create minimal .env for container test
+          echo "DATABASE_URL=sqlite:///./optillm.db" > .env
+          echo "APP_ENV=testing" >> .env
+
+          # Start container
+          docker run -d \
+            --name optillm_test \
+            -p 8888:8000 \
+            --env-file .env \
+            optillm:${{ github.sha }}
+
+          # Wait for startup (embedding model load takes ~20s)
+          echo "Waiting for startup..."
+          sleep 35
+
+          # Health check
+          curl -f http://localhost:8888/health || (docker logs optillm_test && exit 1)
+          echo "Health check passed!"
+
+          # Cleanup
+          docker stop optillm_test
+          docker rm optillm_test

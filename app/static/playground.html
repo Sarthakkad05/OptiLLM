@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OptiLLM Gateway — Live Prompting Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #07090e;
+      --card-bg: #0f172a;
+      --card-border: #1e293b;
+      --input-bg: #020617;
+      --accent-cyan: #38bdf8;
+      --accent-indigo: #6366f1;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --font: 'Plus Jakarta Sans', sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(90deg, #ffffff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: var(--accent-emerald);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent-emerald);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    main {
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px;
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: 32px;
+      flex: 1;
+    }
+
+    @media (max-width: 1024px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Prompt Input Section */
+    .prompt-area {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 18px;
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      outline: none;
+      resize: vertical;
+      min-height: 180px;
+      transition: all 0.2s ease;
+    }
+
+    textarea:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    .presets {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--card-border);
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .preset-btn:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .send-btn {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 16px 28px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35);
+      transition: all 0.2s ease;
+    }
+
+    .send-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(56, 189, 248, 0.45);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Telemetry Display */
+    .telemetry-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 14px;
+    }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .metric-card {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+    }
+
+    .metric-val {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge-hit { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-routed { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+    .badge-miss { background: rgba(148, 163, 184, 0.15); color: var(--text-secondary); border: 1px solid rgba(148, 163, 184, 0.3); }
+
+    .reason-banner {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #93c5fd;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      line-height: 1.5;
+    }
+
+    /* Tabs Bar */
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 8px;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.1);
+    }
+
+    .output-container {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 18px;
+      min-height: 160px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      overflow-y: auto;
+      max-height: 320px;
+      flex: 1;
+    }
+
+    .json-container {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #38bdf8;
+      background: #020617;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px;
+      overflow-x: auto;
+      max-height: 320px;
+      white-space: pre;
+    }
+
+    .placeholder-text {
+      color: #475569;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div class="logo-text">OptiLLM Gateway</div>
+    </div>
+    <div class="status-pill">
+      <div class="dot"></div>
+      Gateway Online (http://localhost:8000)
+    </div>
+  </header>
+
+  <main>
+    <!-- Left: Prompting Interface -->
+    <section class="card">
+      <div class="card-title">
+        <span>✏️ Prompt Input Studio</span>
+      </div>
+
+      <div class="presets">
+        <span style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Try Presets:</span>
+        <button class="preset-btn" onclick="setPrompt('Explain machine learning in one short sentence.', true)">⚡ Simple Prompt (Routes to gpt-4o-mini)</button>
+        <button class="preset-btn" onclick="setPrompt('What is quantum computing in simple terms?', false)">🔄 Repeat Query (Tests Cache Hit)</button>
+        <button class="preset-btn" onclick="setPrompt('Write a Python function for quicksort with time complexity comments.', true)">💻 Code Query (Retains gpt-4o)</button>
+      </div>
+
+      <div class="prompt-area">
+        <textarea id="promptInput" placeholder="Type your prompt here...">Explain machine learning in one short sentence.</textarea>
+      </div>
+
+      <button id="sendBtn" class="send-btn" onclick="executePrompt()">
+        <span class="spinner" id="spinner"></span>
+        <span id="btnLabel">Send to OptiLLM Gateway ➔</span>
+      </button>
+    </section>
+
+    <!-- Right: Telemetry & Output -->
+    <section class="card">
+      <div class="telemetry-header">
+        <div class="card-title">
+          <span>📊 Live OptiLLM Gateway Telemetry</span>
+        </div>
+        <div id="httpStatus" class="badge badge-miss">AWAITING REQUEST</div>
+      </div>
+
+      <!-- Telemetry Metrics Grid -->
+      <div class="telemetry-grid">
+        <div class="metric-card">
+          <div class="metric-label">Cache Status</div>
+          <div class="metric-val" id="teleCache"><span class="badge badge-miss">-</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Model Selected</div>
+          <div class="metric-val" id="teleModel" style="color: var(--accent-cyan); font-size: 14px;">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Latency</div>
+          <div class="metric-val" id="teleLatency">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Task Complexity</div>
+          <div class="metric-val" id="teleComplexity" style="color: #818cf8; font-size: 14px;">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Actual Cost</div>
+          <div class="metric-val" id="teleCost" style="color: var(--accent-amber);">$0.000000</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Cost Saved</div>
+          <div class="metric-val" id="teleSavings" style="color: var(--accent-emerald);">$0.000000</div>
+        </div>
+      </div>
+
+      <!-- Routing Reason Banner -->
+      <div class="reason-banner" id="reasonBanner" style="display: none;">
+        <span>💡</span>
+        <span id="reasonMsg">Routing decision details will appear here.</span>
+      </div>
+
+      <!-- Tabs Bar -->
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tabAssistantBtn" onclick="switchView('assistant')">💬 Assistant Response</button>
+        <button class="tab-btn" id="tabJsonBtn" onclick="switchView('json')">📄 Raw JSON Response</button>
+      </div>
+
+      <!-- Assistant Response View -->
+      <div class="output-container" id="assistantView">
+        <span class="placeholder-text">Type a prompt and click "Send to OptiLLM Gateway" to view response output and live metrics.</span>
+      </div>
+
+      <!-- JSON Response View -->
+      <pre class="json-container" id="jsonView" style="display: none;"><span class="placeholder-text">// Raw JSON payload will appear here after sending request.</span></pre>
+    </section>
+  </main>
+
+  <script>
+    let bypassCacheFlag = true;
+
+    function setPrompt(text, bypassCache) {
+      document.getElementById('promptInput').value = text;
+      bypassCacheFlag = bypassCache;
+    }
+
+    function switchView(view) {
+      const assistantView = document.getElementById('assistantView');
+      const jsonView = document.getElementById('jsonView');
+      const tabAssistantBtn = document.getElementById('tabAssistantBtn');
+      const tabJsonBtn = document.getElementById('tabJsonBtn');
+
+      if (view === 'assistant') {
+        assistantView.style.display = 'block';
+        jsonView.style.display = 'none';
+        tabAssistantBtn.classList.add('active');
+        tabJsonBtn.classList.remove('active');
+      } else {
+        assistantView.style.display = 'none';
+        jsonView.style.display = 'block';
+        tabAssistantBtn.classList.remove('active');
+        tabJsonBtn.classList.add('active');
+      }
+    }
+
+    async function executePrompt() {
+      const promptText = document.getElementById('promptInput').value.trim();
+      if (!promptText) return;
+
+      const sendBtn = document.getElementById('sendBtn');
+      const spinner = document.getElementById('spinner');
+      const btnLabel = document.getElementById('btnLabel');
+      const httpStatus = document.getElementById('httpStatus');
+      const assistantView = document.getElementById('assistantView');
+      const jsonView = document.getElementById('jsonView');
+      const reasonBanner = document.getElementById('reasonBanner');
+
+      sendBtn.disabled = true;
+      spinner.style.display = 'inline-block';
+      btnLabel.innerText = 'Processing Gateway...';
+      httpStatus.innerText = 'PROCESSING...';
+      httpStatus.className = 'badge badge-routed';
+
+      const startTime = performance.now();
+      const payload = {
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: promptText }],
+        optillm: {
+          bypass_cache: bypassCacheFlag,
+          bypass_compression: false,
+          bypass_routing: false
+        }
+      };
+
+      try {
+        const res = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const elapsed = Math.round(performance.now() - startTime);
+        const data = await res.json();
+
+        // Populate raw JSON
+        jsonView.innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok) {
+          httpStatus.innerText = `HTTP 200 OK (${elapsed}ms)`;
+          httpStatus.className = 'badge badge-hit';
+
+          // Response text
+          const assistantMsg = data.choices?.[0]?.message?.content || 'No response content.';
+          assistantView.innerText = assistantMsg;
+
+          // Telemetry details
+          const meta = data.optillm_metadata || {};
+
+          // Cache
+          if (meta.cache_hit) {
+            document.getElementById('teleCache').innerHTML = '<span class="badge badge-hit">CACHE HIT</span>';
+          } else {
+            document.getElementById('teleCache').innerHTML = '<span class="badge badge-miss">CACHE MISS</span>';
+          }
+
+          // Model used
+          document.getElementById('teleModel').innerText = meta.model_used || data.model || 'gpt-4o';
+
+          // Latency
+          document.getElementById('teleLatency').innerText = `${meta.latency_ms || elapsed} ms`;
+
+          // Complexity
+          document.getElementById('teleComplexity').innerText = meta.complexity ? meta.complexity.toUpperCase() : 'NORMAL';
+
+          // Cost & Savings
+          document.getElementById('teleCost').innerText = `$${(meta.cost_usd || 0).toFixed(6)}`;
+          document.getElementById('teleSavings').innerText = `$${(meta.savings_usd || 0).toFixed(6)}`;
+
+          // Banner reason
+          if (meta.routing_reason) {
+            document.getElementById('reasonMsg').innerText = meta.routing_reason;
+            reasonBanner.style.display = 'flex';
+          } else {
+            reasonBanner.style.display = 'none';
+          }
+
+        } else {
+          httpStatus.innerText = `HTTP ${res.status} ERROR`;
+          httpStatus.className = 'badge badge-miss';
+          assistantView.innerText = `Error (${res.status}): ${data.detail || JSON.stringify(data)}`;
+        }
+      } catch (err) {
+        httpStatus.innerText = 'NETWORK ERROR';
+        httpStatus.className = 'badge badge-miss';
+        assistantView.innerText = `Network Error: ${err.message}`;
+      } finally {
+        sendBtn.disabled = false;
+        spinner.style.display = 'none';
+        btnLabel.innerText = 'Send to OptiLLM Gateway ➔';
+      }
+    }
+  </script>
+</body>
+</html>

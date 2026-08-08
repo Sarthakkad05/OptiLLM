@@ -1,6 +1,18 @@
-version: '3.8'
-
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: optillm_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   db:
     image: postgres:15-alpine
     container_name: optillm_db
@@ -19,20 +31,30 @@ services:
       retries: 5
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: optillm_api
     ports:
       - "8000:8000"
     environment:
-    - DATABASE_URL=postgresql://optillm:password@db:5432/optillmdb
+      - DATABASE_URL=postgresql://optillm:password@db:5432/optillmdb
+      - REDIS_URL=redis://redis:6379/0
     env_file:
       - .env
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   postgres_data:
+  redis_data:

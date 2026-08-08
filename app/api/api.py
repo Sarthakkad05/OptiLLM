@@ -7,7 +7,9 @@ from app.api.endpoints import (
     enterprise,
     evaluation,
     health,
+    keys,
     mcp,
+    models,
     prompts,
     providers,
     proxy,
@@ -19,21 +21,30 @@ from app.api.endpoints import (
 
 api_router = APIRouter()
 
-api_router.include_router(health.router)
+# ── Core ──────────────────────────────────────────────────────────────────────
+api_router.include_router(health.router)         # GET /health, GET /ready
+api_router.include_router(proxy.router)          # POST /v1/chat/completions
+api_router.include_router(models.router)         # GET /v1/models, GET /v1/models/{id}
+api_router.include_router(keys.router)           # POST/GET/DELETE /v1/keys
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
 api_router.include_router(analytics.router, prefix="/api/v1")
 api_router.include_router(compression_preview.router, prefix="/api/v1")
+
+# ── Providers & Routing ────────────────────────────────────────────────────────
 api_router.include_router(providers.router, prefix="/api/v1/providers")
 api_router.include_router(router_config.router, prefix="/api/v1")
+
+# ── Evaluation & RAG ──────────────────────────────────────────────────────────
 api_router.include_router(evaluation.router, prefix="/api/v1")
 api_router.include_router(rag.router, prefix="/api/v1")
+
+# ── Enterprise ────────────────────────────────────────────────────────────────
 api_router.include_router(enterprise.router, prefix="/api/v1")
 api_router.include_router(budgets.router, prefix="/api/v1/budgets")
 
+# ── Prompts, Workflows & Tools ────────────────────────────────────────────────
 api_router.include_router(prompts.router, prefix="/api/v1/prompts")
 api_router.include_router(workflows.router, prefix="/api/v1/workflows")
 api_router.include_router(tools.router, prefix="/api/v1/tools")
 api_router.include_router(mcp.router, prefix="/api/v1/mcp")
-api_router.include_router(proxy.router)
-
-
-
