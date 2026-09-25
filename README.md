@@ -271,6 +271,7 @@ Every panel shown above is wired to a real endpoint and was verified against a r
 - [Plugins Architecture](docs/plugins.md) — Writing custom lifecycle hooks, webhooks, and alerts.
 - [Evaluation & Quality Analytics](docs/evaluation.md) — Dual-mode judge, quality-cost tradeoffs, and user feedback loop.
 - [Production Deployment Guide](docs/deployment.md) — HA Docker Compose stack, migrations, validated load-test results, Kubernetes probes, and production checklist.
+- [Interview Q&A](docs/interview_questions.md) — 50+ deep-dive questions and answers covering every subsystem, design decision, and bug discovered during development.
 
 ---
 
