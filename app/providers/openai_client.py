@@ -141,6 +141,30 @@ class OpenAIProvider(BaseProvider):
                         except Exception:
                             continue
 
+    async def embed(
+        self,
+        texts: List[str],
+        model: str = "text-embedding-3-small",
+    ) -> List[List[float]]:
+        """Generate embeddings via OpenAI Embeddings API."""
+        if not self.is_available():
+            raise ValueError("OPENAI_API_KEY is not set in .env")
+
+        headers = {
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {"input": texts, "model": model}
+
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/embeddings", json=payload, headers=headers
+            )
+            response.raise_for_status()
+
+        data = response.json()
+        return [item["embedding"] for item in data["data"]]
+
 
 # Instantiated OpenAI Provider
 openai_provider = OpenAIProvider()

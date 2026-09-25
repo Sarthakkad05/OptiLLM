@@ -194,19 +194,31 @@ def insert_cache(
             seconds=ttl
         )
 
-    # 1. Insert into DB & FAISS
+    # 1. Insert or update DB entry
     effective_namespace = namespace or settings.CACHE_NAMESPACE or "default"
-    entry = CacheEntry(
-        faiss_index_id=faiss_id,
-        prompt_text=lookup_text[:2000],
-        response_text=response_text,
-        model=model,
-        tokens_input=tokens_input,
-        tokens_output=tokens_output,
-        expires_at=expires_at,
-        tenant_id=effective_namespace,
+    existing_entry = (
+        db.query(CacheEntry).filter(CacheEntry.faiss_index_id == faiss_id).first()
     )
-    db.add(entry)
+    if existing_entry:
+        existing_entry.prompt_text = lookup_text[:2000]
+        existing_entry.response_text = response_text
+        existing_entry.model = model
+        existing_entry.tokens_input = tokens_input
+        existing_entry.tokens_output = tokens_output
+        existing_entry.expires_at = expires_at
+        existing_entry.tenant_id = effective_namespace
+    else:
+        entry = CacheEntry(
+            faiss_index_id=faiss_id,
+            prompt_text=lookup_text[:2000],
+            response_text=response_text,
+            model=model,
+            tokens_input=tokens_input,
+            tokens_output=tokens_output,
+            expires_at=expires_at,
+            tenant_id=effective_namespace,
+        )
+        db.add(entry)
     db.commit()
 
     # 2. Dual-write to Redis Cache

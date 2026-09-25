@@ -13,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import verify_api_key
 from app.core.budget_manager import check_budget_and_predict, record_spend
-from app.core.rate_limiter import check_rate_limit
-from app.db.session import get_db
+from app.core.config import settings
+from app.core.rate_limiter import check_rate_limit, record_token_usage, get_rate_limit_headers
+from app.db.session import get_db, release_db_on_return
 from app.schemas.chat import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -40,6 +41,7 @@ logger = logging.getLogger("optillm.proxy")
     ),
     dependencies=[Depends(verify_api_key), Depends(check_rate_limit)],
 )
+@release_db_on_return
 async def chat_completions(
     request: ChatCompletionRequest,
     db: Session = Depends(get_db),
@@ -53,6 +55,19 @@ async def chat_completions(
     api_key = "default-key"
     if authorization and authorization.startswith("Bearer "):
         api_key = authorization.replace("Bearer ", "").strip()
+
+    if len(request.messages) > settings.MAX_MESSAGES_PER_REQUEST:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many messages ({len(request.messages)}). Maximum allowed is {settings.MAX_MESSAGES_PER_REQUEST}.",
+        )
+
+    total_chars = sum(len(m.content or "") for m in request.messages if isinstance(m.content, str))
+    if total_chars > settings.MAX_PROMPT_LENGTH:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Prompt too long ({total_chars} chars). Maximum allowed is {settings.MAX_PROMPT_LENGTH} characters.",
+        )
 
     messages = [m.model_dump() for m in request.messages]
     config = request.optillm or {}
@@ -107,13 +122,18 @@ async def chat_completions(
         )
         # Record actual spend in budget manager
         record_spend(api_key=api_key, cost_usd=result.get("cost_usd", 0.0), db=db)
+        # Record token usage for per-key TPM tracking
+        tokens_used = result.get("tokens_input", 0) + result.get("tokens_output", 0)
+        record_token_usage(api_key, tokens_used)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Gateway error: %s", str(e), exc_info=True)
         raise HTTPException(status_code=502, detail=f"Provider error: {str(e)}")
 
-    return ChatCompletionResponse(
+    response_obj = ChatCompletionResponse(
         id=result["id"],
         created=result["created"],
         model=result["model"],
@@ -142,4 +162,16 @@ async def chat_completions(
             routing_reason=result.get("routing_reason"),
             complexity=result.get("complexity"),
         ),
+    )
+
+    # Attach rate-limit headers to non-streaming response
+    from fastapi.responses import JSONResponse
+    rl_headers = get_rate_limit_headers(
+        api_key,
+        rpm_limit=settings.RATE_LIMIT_PER_MINUTE,
+        tpm_limit=settings.TPM_LIMIT_PER_KEY,
+    )
+    return JSONResponse(
+        content=response_obj.model_dump(),
+        headers=rl_headers,
     )

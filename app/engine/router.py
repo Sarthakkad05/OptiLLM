@@ -167,6 +167,7 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
             "routing_mode": mode,
             "confidence": 1.0,
             "shadow_disagreement": False,
+            "ai_predicted_complexity": None,
         }
 
     rule_complexity, score, breakdown = analyze_complexity(messages, requested_model)
@@ -215,7 +216,7 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
 
     if routed_model and requested_model in _EXPENSIVE_MODELS:
         reason = (
-            f"Task complexity={final_complexity} ({mode} mode"
+            f"Task complexity={final_complexity.value} ({mode} mode"
             f"{', fallback applied' if confidence_fallback else ''}) — "
             f"downgraded from {requested_model} to {routed_model}."
         )
@@ -231,6 +232,7 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
             "shadow_disagreement": shadow_disagreement,
             "confidence_fallback": confidence_fallback,
             "ai_probabilities": ai_pred["probabilities"],
+            "ai_predicted_complexity": ai_pred["predicted_complexity"],
         }
 
     return {
@@ -239,11 +241,12 @@ def route(messages: List[Dict], requested_model: str) -> Dict:
         "complexity": final_complexity,
         "score": score,
         "score_breakdown": breakdown,
-        "routing_reason": f"Task complexity={final_complexity} — original model retained.",
+        "routing_reason": f"Task complexity={final_complexity.value} — original model retained.",
         "routing_mode": mode,
         "confidence": ai_pred["confidence"],
         "shadow_disagreement": shadow_disagreement,
         "confidence_fallback": confidence_fallback,
+        "ai_predicted_complexity": ai_pred["predicted_complexity"],
         "ai_probabilities": ai_pred["probabilities"],
     }
 

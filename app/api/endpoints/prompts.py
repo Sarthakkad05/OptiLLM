@@ -111,3 +111,80 @@ def get_schema_instructions(request: SchemaInstructionRequest) -> Dict[str, Any]
         schema_name=request.schema_name, properties=request.properties
     )
     return {"instructions": instructions}
+
+
+# ── Version Control Endpoints (Phase 2.5) ──────────────────────────────────────
+
+
+class CreateVersionRequest(BaseModel):
+    system_template: str
+    user_template: str
+    description: Optional[str] = None
+    commit_message: Optional[str] = None
+    version: Optional[str] = None
+
+
+class CompareVersionsRequest(BaseModel):
+    version_a: str = "v1"
+    version_b: str = "v2"
+    variables: Dict[str, Any] = {}
+
+
+@router.get("/{name}/versions", tags=["Prompts"])
+def get_prompt_versions(name: str) -> List[Dict[str, Any]]:
+    """List full version history and changelog for a specific prompt template."""
+    history = prompt_engine.get_history(name)
+    if not history:
+        raise HTTPException(status_code=404, detail=f"Prompt template '{name}' not found.")
+    return history
+
+
+@router.post("/{name}/versions", tags=["Prompts"])
+def create_prompt_version(name: str, request: CreateVersionRequest) -> Dict[str, Any]:
+    """Create a new version for a prompt template (auto-increments if not specified)."""
+    record = prompt_engine.create_version(
+        name=name,
+        system_template=request.system_template,
+        user_template=request.user_template,
+        description=request.description,
+        commit_message=request.commit_message,
+        version=request.version,
+    )
+    return {
+        "name": record.name,
+        "version": record.version,
+        "commit_message": record.commit_message,
+        "description": record.description,
+        "input_variables": record.input_variables,
+        "is_active": record.is_active,
+        "message": f"Created version '{record.name}:{record.version}' successfully.",
+    }
+
+
+@router.post("/{name}/rollback/{version}", tags=["Prompts"])
+def rollback_prompt_version(name: str, version: str) -> Dict[str, Any]:
+    """Roll back the active version of a prompt template to a specified earlier version."""
+    try:
+        record = prompt_engine.rollback(name, version)
+        return {
+            "name": record.name,
+            "active_version": record.version,
+            "description": record.description,
+            "message": f"Rolled back '{name}' to active version '{version}'.",
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/{name}/compare", tags=["Prompts"])
+def compare_prompt_versions(name: str, request: CompareVersionsRequest) -> Dict[str, Any]:
+    """Compare two versions of a prompt template with sample variables, returning messages and token diff."""
+    try:
+        return prompt_engine.compare_versions(
+            name=name,
+            version_a=request.version_a,
+            version_b=request.version_b,
+            variables=request.variables,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

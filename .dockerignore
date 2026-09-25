@@ -1,0 +1,35 @@
+# Keep the build context (and the image, via `COPY . ./`) to what the app
+# actually needs at runtime. Without this, local builds shipped the host venv
+# (~1.6GB, macOS binaries), .git, the local SQLite DB and — worst — .env with
+# real provider keys into the image.
+
+# Secrets / local config — pass via env_file / environment at runtime instead
+.env
+.env.*
+!.env.example
+
+# Local environments & tooling
+venv/
+.venv/
+.git/
+.github/
+.claude/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+**/__pycache__/
+**/*.pyc
+.pre-commit-config.yaml
+
+# Local runtime state (gitignored; the app recreates/falls back when absent)
+*.db
+faiss_store/
+*.joblib
+
+# Not needed in the runtime image
+tests/
+docs/
+benchmarks/
+dashboard/
+docker-compose*.yml
+Makefile

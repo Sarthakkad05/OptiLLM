@@ -38,6 +38,7 @@ class DashboardSummary(BaseModel):
     total_tokens_output: int
     total_tokens_saved: int
     avg_latency_ms: float
+    unique_models: int
 
 
 class CostOverTime(BaseModel):

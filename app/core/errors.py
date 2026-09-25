@@ -26,9 +26,9 @@ STATUS_TITLE_MAP = {
 def build_problem_details(
     status_code: int, detail: Any, instance_path: str
 ) -> Dict[str, Any]:
-    """Generates an RFC 7807 problem details dictionary."""
+    """Generates an RFC 7807 + OpenAI compatible problem details dictionary."""
     title = STATUS_TITLE_MAP.get(status_code, "HTTP Error")
-    type_slug = title.lower().replace(" ", "-")
+    type_slug = title.lower().replace(" ", "_")
 
     return {
         "type": f"https://optillm.ai/errors/{type_slug}",
@@ -36,21 +36,29 @@ def build_problem_details(
         "status": status_code,
         "detail": str(detail),
         "instance": instance_path,
+        # OpenAI API error schema compatibility
+        "error": {
+            "message": str(detail),
+            "type": type_slug,
+            "param": None,
+            "code": str(status_code),
+        },
     }
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Handler for FastAPI HTTPException converting to RFC 7807 format."""
+    """Handler for FastAPI HTTPException converting to OpenAI & RFC 7807 format."""
     problem = build_problem_details(
         status_code=exc.status_code,
         detail=exc.detail,
         instance_path=request.url.path,
     )
     headers = getattr(exc, "headers", None) or {}
+    media_type = "application/json" if request.url.path.startswith("/v1") else "application/problem+json"
     return JSONResponse(
         status_code=exc.status_code,
         content=problem,
-        headers={"Content-Type": "application/problem+json", **headers},
+        headers={"Content-Type": media_type, **headers},
     )
 
 

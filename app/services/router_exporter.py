@@ -1,59 +1,17 @@
 """
-Historical Routing Data Exporter & Dataset Generator
-Extracts feature vectors and complexity labels from database request logs
-and generates synthetic training data for model retraining.
+Synthetic Training Dataset Generator
+Generates a small synthetic seed dataset for instantly bootstrapping the AI
+Router classifier (used by tests and for cold-start training before enough
+real/labeled traffic exists — see app/engine/router_trainer.py for the real
+retrain-evaluate-hotswap pipeline that should be used once real data exists).
 """
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
-from sqlalchemy.orm import Session
-
-from app.db.models import RequestLog
 from app.engine.ai_router import extract_features
-from app.engine.router import analyze_complexity
 
 logger = logging.getLogger("optillm.services.router_exporter")
-
-
-def export_historical_routing_data(db: Session, max_rows: int = 1000) -> Dict[str, Any]:
-    """
-    Extract historical feature vectors and complexity labels from request_logs table.
-    """
-    logs = (
-        db.query(RequestLog)
-        .order_by(RequestLog.id.desc())
-        .limit(max_rows)
-        .all()
-    )
-
-    feature_dicts: List[Dict[str, float]] = []
-    labels: List[str] = []
-
-    for log in logs:
-        snippet = log.prompt_snippet or ""
-        messages = [{"role": "user", "content": snippet}]
-        model = log.model_requested or "gpt-4o"
-
-        feat = extract_features(messages, model)
-
-        # Derive complexity label from actual routing outcome or heuristic score
-        if log.routed and log.model_used == "gemini-2.0-flash":
-            label = "low"
-        elif log.routed and log.model_used == "gpt-4o-mini":
-            label = "medium"
-        else:
-            comp, _, _ = analyze_complexity(messages, model)
-            label = comp.value
-
-        feature_dicts.append(feat)
-        labels.append(label)
-
-    return {
-        "count": len(labels),
-        "features": feature_dicts,
-        "labels": labels,
-    }
 
 
 def generate_synthetic_training_dataset() -> Tuple[List[Dict[str, float]], List[str]]:

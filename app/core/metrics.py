@@ -59,6 +59,23 @@ PROVIDER_CALLS_TOTAL = Counter(
     ["provider", "model"],
 )
 
+CIRCUIT_BREAKER_STATE = Gauge(
+    "optillm_circuit_breaker_state",
+    "Circuit breaker status (0=closed, 1=open, 2=half-open)",
+    ["provider"],
+)
+
+RATE_LIMIT_EXCEEDED_TOTAL = Counter(
+    "optillm_rate_limit_exceeded_total",
+    "Total requests rejected due to RPM, TPM, or auto-blocklist rate limits",
+    ["limit_type"],
+)
+
+DAILY_BUDGET_UTILIZATION = Gauge(
+    "optillm_daily_budget_utilization_ratio",
+    "Current spend as a fraction of daily budget limit (0.0 to 1.0+)",
+)
+
 
 def record_request_metrics(method: str, endpoint: str, status_code: int, duration_seconds: float):
     """Record HTTP request counter and latency histogram metrics."""

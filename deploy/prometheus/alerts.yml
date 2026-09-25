@@ -1,0 +1,85 @@
+# Prometheus Alerting Rules for OptiLLM AI Gateway
+# Monitors gateway error rates, semantic cache efficiency, provider health, budgets, and SLAs.
+
+groups:
+  - name: optillm_alerts
+    rules:
+      # ── 1. High 5xx Error Rate ───────────────────────────────────────────────
+      - alert: OptiLLMHighErrorRate
+        expr: >-
+          (
+            sum(rate(optillm_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(optillm_http_requests_total[5m])), 0.001)
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: optillm-gateway
+        annotations:
+          summary: "OptiLLM Gateway 5xx error rate is above 5%"
+          description: "Gateway is returning high error rates ({{ $value | humanizePercentage }}) over the last 5 minutes."
+
+      # ── 2. Low Semantic Cache Hit Rate ───────────────────────────────────────
+      - alert: OptiLLMCacheHitRateLow
+        expr: >-
+          (
+            sum(rate(optillm_cache_hits_total[15m]))
+            /
+            clamp_min(sum(rate(optillm_cache_hits_total[15m])) + sum(rate(optillm_cache_misses_total[15m])), 0.001)
+          ) < 0.10
+        for: 15m
+        labels:
+          severity: warning
+          service: optillm-cache
+        annotations:
+          summary: "OptiLLM Semantic Cache hit rate is below 10%"
+          description: "Cache hit rate has dropped to {{ $value | humanizePercentage }}. Consider adjusting similarity threshold or cache TTL."
+
+      # ── 3. Downstream Provider Circuit Breaker Open ──────────────────────────
+      - alert: OptiLLMProviderCircuitOpen
+        expr: optillm_circuit_breaker_state == 1
+        for: 30s
+        labels:
+          severity: critical
+          service: optillm-providers
+        annotations:
+          summary: "Circuit breaker is OPEN for provider '{{ $labels.provider }}'"
+          description: "Provider '{{ $labels.provider }}' exceeded failure thresholds. Outgoing traffic is being degraded or circuit-broken."
+
+      # ── 4. Budget Ceiling Approaching Limit ───────────────────────────────────
+      - alert: OptiLLMBudgetNearLimit
+        expr: optillm_daily_budget_utilization_ratio > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: optillm-budget
+        annotations:
+          summary: "OptiLLM daily spend is above 85% of budget"
+          description: "Current spend has consumed {{ $value | humanizePercentage }} of the daily ceiling."
+
+      # ── 5. P95 Request Latency SLA Breach ────────────────────────────────────
+      - alert: OptiLLMSLALatencyBreach
+        expr: >-
+          histogram_quantile(
+            0.95,
+            sum(rate(optillm_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 0.500
+        for: 3m
+        labels:
+          severity: warning
+          service: optillm-sla
+        annotations:
+          summary: "P95 request latency exceeds 500ms SLA target"
+          description: "P95 latency is currently {{ $value }}s over a 5-minute sliding window."
+
+      # ── 6. Excessive Rate-Limit Rejections (DDoS or Abusive Key) ─────────────
+      - alert: OptiLLMRateLimitSpike
+        expr: sum(rate(optillm_rate_limit_exceeded_total[5m])) > 15
+        for: 2m
+        labels:
+          severity: warning
+          service: optillm-security
+        annotations:
+          summary: "Elevated 429 rate limit rejections detected"
+          description: "OptiLLM is rejecting {{ $value }} requests/second due to RPM/TPM exhaustion or auto-blocklist activations."

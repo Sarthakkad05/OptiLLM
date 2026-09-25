@@ -1,0 +1,49 @@
+name: OptiLLM Performance Benchmarks
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'app/engine/**'
+      - 'app/services/gateway.py'
+      - 'app/services/router.py'
+      - 'benchmarks/**'
+
+jobs:
+  benchmark:
+    name: Run Benchmark Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          # CPU-only torch first — see Dockerfile for why (avoids pulling
+          # several GB of unused NVIDIA CUDA libraries on this GPU-less runner).
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          python -m spacy download en_core_web_sm
+
+      - name: Execute Benchmark Suite
+        run: |
+          python -m benchmarks.generate_report
+
+      - name: Verify Benchmark Output
+        run: |
+          test -f benchmarks/BENCHMARK_REPORT.md
+          cat benchmarks/BENCHMARK_REPORT.md
+
+      - name: Upload Benchmark Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: benchmarks/BENCHMARK_REPORT.md

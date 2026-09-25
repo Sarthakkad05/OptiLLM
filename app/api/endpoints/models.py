@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
 
-from app.services.cost_estimator import PRICING_TABLE
+from app.services.cost_estimator import get_model_pricing
 from app.providers.registry import provider_registry
 
 router = APIRouter()
@@ -157,7 +157,7 @@ def list_models() -> ModelsResponse:
         }
         mapped_provider = provider_map.get(provider_key, "openai")
 
-        pricing = PRICING_TABLE.get(model_id, (0.0, 0.0))
+        pricing = get_model_pricing(model_id)
 
         data.append(
             ModelCard(
@@ -191,7 +191,7 @@ def get_model(model_id: str) -> ModelCard:
     if not meta:
         raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found in registry.")
 
-    pricing = PRICING_TABLE.get(model_id, (0.0, 0.0))
+    pricing = get_model_pricing(model_id)
     return ModelCard(
         id=model_id,
         owned_by=meta["owned_by"],

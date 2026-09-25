@@ -25,6 +25,27 @@ logger = logging.getLogger("optillm.provider.dispatcher")
 _MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 1.0  # seconds — doubled on each attempt
 
+# Per-provider timeout overrides (seconds).
+# Falls back to settings.REQUEST_TIMEOUT_SECONDS if provider not listed.
+_PROVIDER_TIMEOUTS: Dict[str, float] = {
+    "openai": 30.0,
+    "gemini": 30.0,
+    "anthropic": 90.0,   # Claude models are slower by nature
+    "groq": 20.0,        # Groq is very fast; short timeout is safe
+    "mistral": 45.0,
+    "azure": 30.0,
+    "bedrock": 60.0,
+    "ollama": 300.0,     # Local models have no SLA; allow generous time
+}
+
+
+def _get_provider_timeout(provider_name: str) -> float:
+    """Return the configured timeout for a provider, falling back to global setting."""
+    from app.core.config import settings
+    return _PROVIDER_TIMEOUTS.get(
+        (provider_name or "").lower(), settings.REQUEST_TIMEOUT_SECONDS
+    )
+
 
 def _is_mock_mode() -> bool:
     """Return True if no registered provider has valid credentials."""
@@ -77,15 +98,28 @@ async def _call_with_retry(
     temperature: float,
     max_tokens: Optional[int],
 ) -> Dict[str, Any]:
-    """Call provider adapter with exponential backoff retry & circuit breaker recording."""
+    """Call provider adapter with exponential backoff retry, circuit breaker, and per-provider timeout."""
+    timeout = _get_provider_timeout(getattr(provider_adapter, "name", ""))
     last_exc = None
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            res = await provider_adapter.call(messages, model, temperature, max_tokens)
+            res = await asyncio.wait_for(
+                provider_adapter.call(messages, model, temperature, max_tokens),
+                timeout=timeout,
+            )
             circuit_breaker.record_success(
                 provider_adapter.name, res.get("latency_ms", 0.0)
             )
             return res
+        except asyncio.TimeoutError:
+            last_exc = TimeoutError(
+                f"Provider '{provider_adapter.name}' timed out after {timeout}s "
+                f"(attempt {attempt}/{_MAX_RETRIES})"
+            )
+            circuit_breaker.record_failure(provider_adapter.name)
+            logger.warning(str(last_exc))
+            if attempt < _MAX_RETRIES:
+                await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** (attempt - 1)))
         except Exception as exc:
             last_exc = exc
             circuit_breaker.record_failure(provider_adapter.name)
@@ -171,6 +205,16 @@ async def call_provider(
                     logger.warning(
                         "Fallback provider '%s' failed: %s", alt_name, fallback_exc
                     )
+
+    from app.core.config import settings
+    if settings.APP_ENV == "production":
+        logger.error("All providers failed or circuit-broken in production — returning 503.")
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="All AI providers are currently unavailable or circuit-broken. Please retry later.",
+            headers={"Retry-After": "30"},
+        )
 
     logger.warning("All primary/fallback providers failed — falling back to mock mode.")
     return await _mock_response(messages, model)
@@ -265,6 +309,13 @@ async def stream_provider(
                     logger.warning(
                         "Streaming fallback '%s' failed: %s", alt_name, fb_exc
                     )
+
+    from app.core.config import settings
+    if settings.APP_ENV == "production":
+        logger.error("All streaming providers failed or circuit-broken in production.")
+        import json
+        yield f"data: {json.dumps({'error': {'message': 'All AI providers are currently unavailable or circuit-broken.', 'type': 'service_unavailable', 'code': 503}})}\n\n"
+        return
 
     logger.warning("All streaming providers failed — falling back to mock stream.")
     async for token in _yield_mock_stream():

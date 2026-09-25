@@ -7,7 +7,7 @@ from app.api.api import api_router
 from app.core.config import settings
 from app.core.errors import http_exception_handler, unhandled_exception_handler
 from app.core.logging import logger
-from app.core.middleware import RequestLoggingMiddleware
+from app.core.middleware import RequestBodyLimitMiddleware, RequestLoggingMiddleware
 from app.db.base import Base  # noqa: F401 — ensures all models are registered
 from app.db.session import SessionLocal, engine
 from app.engine.cache import sync_cache_on_startup
@@ -28,32 +28,26 @@ async def lifespan(app: FastAPI):
         settings.DEFAULT_MODEL,
     )
 
-    # Ensure all DB tables exist (idempotent — safe to run on every start)
-    Base.metadata.create_all(bind=engine)
+    # Run Alembic migrations to bring schema up to date.
+    # A failed migration means the DB schema may not match what the ORM
+    # models expect — continuing to boot and serve traffic against a
+    # mismatched schema risks silent errors or data corruption, so this is
+    # fatal rather than a logged warning (see docs/deployment.md's
+    # HA validation section for the incident that motivated this: a stale
+    # pre-alembic Postgres volume caused exactly this failure mode).
+    import subprocess, sys
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        logger.error(
+            "Alembic migration failed — refusing to start: %s",
+            result.stderr.strip() or result.stdout.strip(),
+        )
+        raise RuntimeError("Alembic migration failed; see logs above for details.")
+    logger.info("✅ Database schema up to date (alembic upgrade head).")
 
-    # Idempotent migration guard for local dev SQLite databases
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        for col_stmt in [
-            "ALTER TABLE cache_entries ADD COLUMN expires_at DATETIME",
-            "ALTER TABLE cache_entries ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
-            "ALTER TABLE request_logs ADD COLUMN tag VARCHAR(100)",
-            "ALTER TABLE request_logs ADD COLUMN quality_score FLOAT",
-            "ALTER TABLE request_logs ADD COLUMN correctness_score FLOAT",
-            "ALTER TABLE request_logs ADD COLUMN relevance_score FLOAT",
-            "ALTER TABLE request_logs ADD COLUMN completeness_score FLOAT",
-            "ALTER TABLE request_logs ADD COLUMN hallucination_score FLOAT",
-            "ALTER TABLE request_logs ADD COLUMN efficiency_score FLOAT",
-            "ALTER TABLE request_logs ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
-            "ALTER TABLE key_budgets ADD COLUMN tenant_id VARCHAR(100) DEFAULT 'default'",
-        ]:
-            try:
-                conn.execute(text(col_stmt))
-                conn.commit()
-            except Exception:
-                pass
-
-    logger.info("✅ Database tables ready.")
 
     # Preload embedding model and FAISS index to avoid cold-start on first request
     load_model()
@@ -82,7 +76,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="AI Gateway — semantic caching, context compression, and intelligent model routing.",
-    version="0.1.0",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -97,6 +91,7 @@ cors_origins = [
     origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()
 ]
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.MAX_REQUEST_BYTES)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins if cors_origins else ["*"],
@@ -133,5 +128,20 @@ def get_playground_ui():
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
     return HTMLResponse(content="<h1>Playground UI file not found</h1>", status_code=404)
+
+
+@app.get("/admin", include_in_schema=True, tags=["Admin"])
+def get_admin_ui():
+    """
+    Renders the OptiLLM Admin UI — LiteLLM-style dashboard for managing keys,
+    models, analytics, providers, cache, and budgets.
+    """
+    from pathlib import Path
+    from fastapi.responses import HTMLResponse
+
+    html_path = Path(__file__).parent / "static" / "admin.html"
+    if html_path.exists():
+        return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Admin UI file not found</h1>", status_code=404)
 
 

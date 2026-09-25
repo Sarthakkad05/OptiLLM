@@ -49,16 +49,30 @@ provider_registry = ProviderRegistry()
 
 
 def _init_default_providers():
-    """Import and register default providers (OpenAI, Gemini, Anthropic, Ollama)."""
+    """Import and register all providers (conditionally based on credentials)."""
     from app.providers.anthropic_client import anthropic_provider
     from app.providers.gemini_client import gemini_provider
     from app.providers.ollama_client import ollama_provider
     from app.providers.openai_client import openai_provider
+    from app.providers.groq_client import groq_provider
+    from app.providers.azure_openai_client import azure_provider
+    from app.providers.mistral_client import mistral_provider
+    from app.providers.bedrock_client import bedrock_provider
 
+    # Core providers
     provider_registry.register(openai_provider)
     provider_registry.register(gemini_provider)
     provider_registry.register(anthropic_provider)
     provider_registry.register(ollama_provider)
+
+    # Extended providers (registered always — available() checks credentials at call time)
+    provider_registry.register(groq_provider)
+    provider_registry.register(azure_provider)
+    provider_registry.register(mistral_provider)
+    provider_registry.register(bedrock_provider)
+
+    available = provider_registry.list_available_providers()
+    logger.info("Available providers: %s", available)
 
 
 _init_default_providers()

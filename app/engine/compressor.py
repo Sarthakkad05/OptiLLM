@@ -77,23 +77,94 @@ def _clean_messages(messages: List[Dict]) -> List[Dict]:
     return cleaned
 
 
-# ── Pass 2: Token-Aware Truncation ────────────────────────────────────────────
+# ── Pass 2: Token-Aware Truncation & TF-IDF Compression ────────────────────────
 
 
-def _truncate_text(text: str, max_tokens: int, model: str) -> str:
+def _compress_text_tfidf(text: str, max_tokens: int, model: str) -> str:
     """
-    Center-truncation: keep the start and end, drop the middle.
-    Preserves: system instructions (start) + user query (end).
+    Smarter context compression using TF-IDF sentence importance ranking.
+    Instead of dumb center-truncation, ranks sentences by informational density
+    and retains the highest-importance sentences in their original chronological order.
     """
     current_tokens = count_tokens_in_string(text, model)
     if current_tokens <= max_tokens:
         return text
 
-    # Split into word tokens (approximate — tiktoken would be accurate but slow here)
+    import re
+    sentences = [s.strip() for s in re.split(r'(?<=[.?!])\s+|\n{2,}', text) if s.strip()]
+    if len(sentences) <= 2:
+        return _truncate_text(text, max_tokens, model, use_tfidf=False)
+
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        vectorizer = TfidfVectorizer(stop_words="english", max_features=1000)
+        tfidf_matrix = vectorizer.fit_transform(sentences)
+        sentence_scores = tfidf_matrix.sum(axis=1).A1
+    except Exception:
+        words = text.lower().split()
+        word_freq = {}
+        for w in words:
+            word_freq[w] = word_freq.get(w, 0) + 1
+        sentence_scores = [
+            sum(word_freq.get(w, 0) for w in s.lower().split()) / max(len(s.split()), 1)
+            for s in sentences
+        ]
+
+    total_sents = len(sentences)
+    scored_indices = []
+    for idx, (sent, score) in enumerate(zip(sentences, sentence_scores)):
+        pos_multiplier = 1.0
+        if idx == 0:
+            pos_multiplier = 1.5
+        elif idx == total_sents - 1:
+            pos_multiplier = 1.3
+        scored_indices.append((idx, float(score) * pos_multiplier, sent))
+
+    scored_indices.sort(key=lambda x: x[1], reverse=True)
+
+    selected_indices = []
+    accumulated_tokens = 0
+    separator_tokens = count_tokens_in_string(" ... ", model)
+
+    for idx, score, sent in scored_indices:
+        sent_tokens = count_tokens_in_string(sent, model)
+        if accumulated_tokens + sent_tokens + separator_tokens <= max_tokens:
+            selected_indices.append(idx)
+            accumulated_tokens += sent_tokens + separator_tokens
+
+    if not selected_indices:
+        return _truncate_text(text, max_tokens, model, use_tfidf=False)
+
+    selected_indices.sort()
+    compressed_sentences = [sentences[i] for i in selected_indices]
+    result = " ".join(compressed_sentences)
+
+    logger.debug(
+        "TF-IDF compression: %d → %d tokens (%d/%d sentences kept)",
+        current_tokens,
+        count_tokens_in_string(result, model),
+        len(selected_indices),
+        total_sents,
+    )
+    return result
+
+
+def _truncate_text(text: str, max_tokens: int, model: str, use_tfidf: bool = True) -> str:
+    """
+    Truncate text to fit within max_tokens.
+    When use_tfidf=True, ranks sentences by TF-IDF informational density.
+    Falls back to edge-preserving center-truncation.
+    """
+    if use_tfidf:
+        return _compress_text_tfidf(text, max_tokens, model)
+
+    current_tokens = count_tokens_in_string(text, model)
+    if current_tokens <= max_tokens:
+        return text
+
     words = text.split()
     total_words = len(words)
 
-    # Estimate words to keep (proportional)
     ratio = max_tokens / current_tokens
     keep_words = int(total_words * ratio)
 
@@ -109,35 +180,30 @@ def _truncate_text(text: str, max_tokens: int, model: str) -> str:
 
 
 def _truncate_messages(
-    messages: List[Dict], token_budget: int, model: str
+    messages: List[Dict], token_budget: int, model: str, use_tfidf: bool = True
 ) -> List[Dict]:
     """
     Distribute the token budget across messages.
     - System messages: protect but tail-trim if necessary.
-    - User/assistant messages: center-truncate the largest ones first.
+    - User/assistant messages: TF-IDF / center-truncate the largest ones first.
     """
     result = []
 
-    # Separate system from conversational messages
     system_msgs = [m for m in messages if m.get("role") == "system"]
     convo_msgs = [m for m in messages if m.get("role") != "system"]
 
-    # Allocate 30% of budget to system messages
     system_budget = int(token_budget * 0.30)
     convo_budget = token_budget - system_budget
 
-    # Truncate system messages (tail-trim — keep the beginning)
     for msg in system_msgs:
         content = msg.get("content", "")
         token_count = count_tokens_in_string(content, model)
         if token_count > system_budget:
-            truncated = _truncate_text(content, system_budget, model)
+            truncated = _truncate_text(content, system_budget, model, use_tfidf=use_tfidf)
             result.append({**msg, "content": truncated})
         else:
             result.append(msg)
 
-    # For conversational messages, always keep the LAST user message intact
-    # (it contains the actual question) and compress earlier context
     if convo_msgs:
         last_msg = convo_msgs[-1]
         earlier_msgs = convo_msgs[:-1]
@@ -147,14 +213,14 @@ def _truncate_messages(
         for msg in earlier_msgs:
             content = msg.get("content", "")
             token_count = count_tokens_in_string(content, model)
-            per_msg_budget = max(100, earlier_budget // max(len(earlier_msgs), 1))
+            per_msg_budget = max(15, earlier_budget // max(len(earlier_msgs), 1))
             if token_count > per_msg_budget:
-                truncated = _truncate_text(content, per_msg_budget, model)
+                truncated = _truncate_text(content, per_msg_budget, model, use_tfidf=use_tfidf)
                 result.append({**msg, "content": truncated})
             else:
                 result.append(msg)
 
-        result.append(last_msg)  # Always keep last message intact
+        result.append(last_msg)
 
     return result
 
@@ -219,7 +285,10 @@ def compress(
             mode,
         )
         was_compressed = True
-        final_messages = _truncate_messages(cleaned, effective_max_tokens, model)
+        use_tfidf = mode in ("smart", "aggressive")
+        final_messages = _truncate_messages(
+            cleaned, effective_max_tokens, model, use_tfidf=use_tfidf
+        )
     else:
         logger.debug(
             "No truncation needed | original=%d tokens (threshold=%d)",

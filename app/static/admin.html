@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OptiLLM — Admin UI</title>
+  <meta name="description" content="OptiLLM AI Gateway Admin Dashboard — manage API keys, models, analytics, providers, and budgets." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & Tokens ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           #0a0b0f;
+      --sidebar-bg:   #0d0f14;
+      --sidebar-w:    220px;
+      --header-h:     56px;
+      --card-bg:      #13161d;
+      --card-border:  #1e2330;
+      --input-bg:     #0d0f14;
+      --hover-bg:     #181b24;
+      --active-bg:    rgba(99,102,241,.12);
+      --active-color: #818cf8;
+      --accent:       #6366f1;
+      --accent-light: #818cf8;
+      --cyan:         #38bdf8;
+      --emerald:      #10b981;
+      --amber:        #f59e0b;
+      --rose:         #f43f5e;
+      --text-1:       #f1f5f9;
+      --text-2:       #94a3b8;
+      --text-3:       #475569;
+      --radius:       8px;
+      --radius-lg:    12px;
+      --shadow:       0 4px 24px rgba(0,0,0,.45);
+      --font:         'Inter', sans-serif;
+      --font-mono:    'Fira Code', monospace;
+      --transition:   .18s ease;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Scrollbar ──────────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2f3d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3f50; }
+
+    /* ── Top Header ─────────────────────────────────────────────────────────── */
+    #top-header {
+      height: var(--header-h);
+      background: rgba(13,15,20,.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px 0 0;
+      gap: 0;
+      z-index: 100;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+    }
+
+    .logo-area {
+      width: var(--sidebar-w);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--card-border);
+      height: 100%;
+    }
+
+    .logo-icon {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+
+    .logo-name {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text-1);
+      letter-spacing: -.3px;
+    }
+
+    .logo-version {
+      font-size: 10px;
+      color: var(--text-3);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 1px 6px;
+      border-radius: 20px;
+      margin-left: 2px;
+    }
+
+    .header-center { flex: 1; display: flex; align-items: center; padding: 0 20px; gap: 8px; }
+
+    .gateway-badge {
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(16,185,129,.08);
+      border: 1px solid rgba(16,185,129,.2);
+      color: var(--emerald);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: default;
+    }
+
+    .badge-dot {
+      width: 7px; height: 7px;
+      background: var(--emerald);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,.4); }
+      50% { opacity: .8; box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+    }
+
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+
+    .header-btn {
+      width: 34px; height: 34px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-2);
+      font-size: 16px;
+      transition: var(--transition);
+    }
+    .header-btn:hover { background: var(--hover-bg); color: var(--text-1); }
+
+    .account-chip {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 5px 12px 5px 6px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .account-chip:hover { background: var(--hover-bg); }
+
+    .account-avatar {
+      width: 26px; height: 26px;
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
+    }
+
+    .account-name { font-size: 13px; font-weight: 600; color: var(--text-1); }
+
+    /* ── Layout ─────────────────────────────────────────────────────────────── */
+    #app {
+      display: flex;
+      height: 100vh;
+      padding-top: var(--header-h);
+    }
+
+    /* ── Sidebar ────────────────────────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+      padding: 12px 8px 20px;
+    }
+
+    .nav-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--text-3);
+      padding: 16px 8px 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      color: var(--text-2);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: var(--transition);
+      user-select: none;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: var(--hover-bg); color: var(--text-1); }
+    .nav-item.active { background: var(--active-bg); color: var(--active-color); }
+    .nav-item .nav-icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; }
+    .nav-item .nav-badge {
+      margin-left: auto;
+      font-size: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 1px 6px;
+      border-radius: 20px;
+      color: var(--text-3);
+    }
+
+    .nav-divider { height: 1px; background: var(--card-border); margin: 8px 0; }
+
+    /* ── Main Content ───────────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg);
+    }
+
+    .page { display: none; padding: 28px 32px; }
+    .page.active { display: block; animation: fadein .2s ease; }
+
+    @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* ── Page Header ────────────────────────────────────────────────────────── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-1);
+    }
+
+    .page-sub { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+
+    /* ── Buttons ────────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(99,102,241,.3);
+    }
+    .btn-primary:hover { background: #4f52d8; box-shadow: 0 2px 20px rgba(99,102,241,.5); }
+
+    .btn-ghost {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-2);
+    }
+    .btn-ghost:hover { background: var(--hover-bg); color: var(--text-1); }
+
+    .btn-danger {
+      background: rgba(244,63,94,.12);
+      border: 1px solid rgba(244,63,94,.25);
+      color: var(--rose);
+    }
+    .btn-danger:hover { background: rgba(244,63,94,.2); }
+
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+    /* ── KPI Cards ──────────────────────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      transition: var(--transition);
+    }
+    .kpi-card:hover { border-color: #2a3045; }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--text-3);
+      margin-bottom: 8px;
+    }
+
+    .kpi-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-1);
+      letter-spacing: -.5px;
+    }
+
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--text-3);
+      margin-top: 4px;
+    }
+
+    .kpi-accent-cyan .kpi-value { color: var(--cyan); }
+    .kpi-accent-emerald .kpi-value { color: var(--emerald); }
+    .kpi-accent-amber .kpi-value { color: var(--amber); }
+    .kpi-accent-indigo .kpi-value { color: var(--accent-light); }
+
+    /* ── Data Table ─────────────────────────────────────────────────────────── */
+    .table-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .table-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+    }
+
+    .table-toolbar-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .table-toolbar-right { display: flex; align-items: center; gap: 8px; }
+
+    .result-count {
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    .search-input {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 6px 12px;
+      outline: none;
+      width: 220px;
+      transition: var(--transition);
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-3); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--text-3);
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--card-border);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    thead th.sortable { cursor: pointer; }
+    thead th.sortable:hover { color: var(--text-2); }
+    thead th .sort-icon { font-size: 9px; margin-left: 4px; opacity: .5; }
+
+    tbody tr {
+      border-bottom: 1px solid var(--card-border);
+      transition: background var(--transition);
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--hover-bg); }
+
+    tbody td {
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--text-2);
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    tbody td.td-id { font-family: var(--font-mono); font-size: 12px; color: var(--accent-light); }
+    tbody td.td-mono { font-family: var(--font-mono); font-size: 12px; }
+
+    .table-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .pagination { display: flex; align-items: center; gap: 6px; }
+    .page-btn {
+      height: 30px; padding: 0 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--text-2);
+      font-size: 12px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .page-btn:hover:not(:disabled) { background: var(--hover-bg); color: var(--text-1); }
+    .page-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Badges ─────────────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-green {
+      background: rgba(16,185,129,.12);
+      border: 1px solid rgba(16,185,129,.25);
+      color: var(--emerald);
+    }
+    .badge-red {
+      background: rgba(244,63,94,.12);
+      border: 1px solid rgba(244,63,94,.25);
+      color: var(--rose);
+    }
+    .badge-yellow {
+      background: rgba(245,158,11,.12);
+      border: 1px solid rgba(245,158,11,.25);
+      color: var(--amber);
+    }
+    .badge-blue {
+      background: rgba(56,189,248,.12);
+      border: 1px solid rgba(56,189,248,.25);
+      color: var(--cyan);
+    }
+    .badge-gray {
+      background: rgba(148,163,184,.08);
+      border: 1px solid rgba(148,163,184,.15);
+      color: var(--text-2);
+    }
+
+    .badge .badge-dot { width: 5px; height: 5px; border-radius: 50%; animation: none; }
+    .badge-green .badge-dot { background: var(--emerald); }
+    .badge-red .badge-dot { background: var(--rose); }
+    .badge-yellow .badge-dot { background: var(--amber); }
+
+    /* ── Modal ──────────────────────────────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+    }
+    .modal-backdrop.open { opacity: 1; pointer-events: all; }
+
+    .modal {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      width: 480px;
+      max-width: 95vw;
+      box-shadow: var(--shadow);
+      transform: scale(.96) translateY(8px);
+      transition: transform .2s ease;
+    }
+    .modal-backdrop.open .modal { transform: scale(1) translateY(0); }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .modal-title { font-size: 16px; font-weight: 700; }
+
+    .modal-close {
+      width: 30px; height: 30px;
+      background: var(--hover-bg);
+      border: none;
+      border-radius: 6px;
+      color: var(--text-2);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--transition);
+    }
+    .modal-close:hover { background: var(--card-border); color: var(--text-1); }
+
+    .modal-body { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 22px; border-top: 1px solid var(--card-border); }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+
+    .form-input, .form-select {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 8px 12px;
+      outline: none;
+      transition: var(--transition);
+      width: 100%;
+    }
+    .form-input:focus, .form-select:focus { border-color: var(--accent); }
+    .form-select { appearance: none; cursor: pointer; }
+
+    /* ── Toast ──────────────────────────────────────────────────────────────── */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      min-width: 280px;
+      box-shadow: var(--shadow);
+      animation: slideIn .25s ease;
+      font-size: 13px;
+    }
+    .toast.toast-success { border-left: 3px solid var(--emerald); }
+    .toast.toast-error { border-left: 3px solid var(--rose); }
+    .toast.toast-info { border-left: 3px solid var(--cyan); }
+
+    @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: none; } }
+
+    /* ── Code key display ───────────────────────────────────────────────────── */
+    .key-reveal {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--emerald);
+      word-break: break-all;
+    }
+
+    .copy-wrap { position: relative; }
+    .copy-btn {
+      position: absolute;
+      top: 6px; right: 6px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      color: var(--text-2);
+      transition: var(--transition);
+    }
+    .copy-btn:hover { color: var(--text-1); }
+
+    /* ── Provider Cards ─────────────────────────────────────────────────────── */
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 14px;
+    }
+
+    .provider-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      transition: var(--transition);
+    }
+    .provider-card:hover { border-color: #2a3045; }
+
+    .provider-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .provider-name { font-size: 14px; font-weight: 700; color: var(--text-1); display: flex; align-items: center; gap: 8px; }
+    .provider-icon { font-size: 20px; }
+
+    .provider-stat { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--card-border); font-size: 12px; }
+    .provider-stat:last-child { border-bottom: none; }
+    .provider-stat-label { color: var(--text-3); }
+    .provider-stat-value { font-weight: 600; color: var(--text-2); font-family: var(--font-mono); }
+
+    /* ── Playground ─────────────────────────────────────────────────────────── */
+    .playground-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 20px; }
+
+    .play-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .play-panel-title { font-size: 14px; font-weight: 700; color: var(--accent-light); display: flex; align-items: center; gap: 8px; }
+
+    textarea.prompt-area {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 14px;
+      resize: vertical;
+      outline: none;
+      transition: var(--transition);
+      line-height: 1.6;
+    }
+    textarea.prompt-area:focus { border-color: var(--accent); }
+
+    .telemetry-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+    .tele-card {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+    }
+
+    .tele-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-3); }
+    .tele-value { font-size: 14px; font-weight: 700; color: var(--text-1); margin-top: 3px; }
+
+    .response-box {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 16px;
+      min-height: 160px;
+      max-height: 340px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-1);
+      white-space: pre-wrap;
+      flex: 1;
+    }
+
+    .tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; }
+    .tab-btn {
+      background: none;
+      border: none;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-3);
+      transition: var(--transition);
+    }
+    .tab-btn.active { background: rgba(99,102,241,.1); color: var(--accent-light); }
+    .tab-btn:hover:not(.active) { color: var(--text-2); }
+
+    /* ── Preset chips ───────────────────────────────────────────────────────── */
+    .preset-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+    .preset-chip {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 4px 11px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-3);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .preset-chip:hover { border-color: var(--accent); color: var(--accent-light); }
+
+    /* ── Budget bars ────────────────────────────────────────────────────────── */
+    .budget-bar-wrap { display: flex; flex-direction: column; gap: 3px; }
+    .budget-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); }
+    .budget-bar { height: 5px; background: var(--card-border); border-radius: 3px; overflow: hidden; }
+    .budget-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--cyan)); transition: width .6s ease; }
+    .budget-bar-fill.warn { background: linear-gradient(90deg, var(--amber), var(--rose)); }
+
+    /* ── Cache stats ────────────────────────────────────────────────────────── */
+    .cache-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+
+    /* ── Model table extras ─────────────────────────────────────────────────── */
+    .cap-chip {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      background: rgba(99,102,241,.12);
+      color: var(--accent-light);
+      margin-right: 4px;
+    }
+
+    /* ── Loading spinner ────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 56px 20px;
+      color: var(--text-3);
+    }
+    .empty-state .es-icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+    .empty-state .es-text { font-size: 14px; }
+
+    /* ── Logs table ─────────────────────────────────────────────────────────── */
+    .log-row-model { font-family: var(--font-mono); font-size: 11px; color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+<!-- ── Top Header ──────────────────────────────────────────────────────────── -->
+<header id="top-header">
+  <div class="logo-area">
+    <div class="logo-icon">⚡</div>
+    <span class="logo-name">OptiLLM</span>
+    <span class="logo-version">v0.1</span>
+  </div>
+  <div class="header-center">
+    <div class="gateway-badge" id="gateway-badge">
+      <span class="badge-dot"></span>
+      <span id="gateway-url">Connecting…</span>
+    </div>
+  </div>
+  <div class="header-actions">
+    <a href="/docs" target="_blank" class="header-btn" title="API Docs">📄</a>
+    <div class="account-chip">
+      <div class="account-avatar">AD</div>
+      <span class="account-name">Admin</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── App Layout ──────────────────────────────────────────────────────────── -->
+<div id="app">
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="nav-section-label">AI Gateway</div>
+    <div class="nav-item active" data-page="keys" id="nav-keys">
+      <span class="nav-icon">🔑</span> Virtual Keys
+    </div>
+    <div class="nav-item" data-page="playground" id="nav-playground">
+      <span class="nav-icon">🧪</span> Playground
+    </div>
+    <div class="nav-item" data-page="models" id="nav-models">
+      <span class="nav-icon">🤖</span> Models + Endpoints
+    </div>
+
+    <div class="nav-section-label">Observability</div>
+    <div class="nav-item" data-page="analytics" id="nav-analytics">
+      <span class="nav-icon">📊</span> Usage
+    </div>
+    <div class="nav-item" data-page="logs" id="nav-logs">
+      <span class="nav-icon">📋</span> Logs
+    </div>
+    <div class="nav-item" data-page="cache" id="nav-cache">
+      <span class="nav-icon">⚡</span> Cache
+    </div>
+
+    <div class="nav-section-label">Providers</div>
+    <div class="nav-item" data-page="providers" id="nav-providers">
+      <span class="nav-icon">🔌</span> Provider Status
+    </div>
+
+    <div class="nav-section-label">Access Control</div>
+    <div class="nav-item" data-page="budgets" id="nav-budgets">
+      <span class="nav-icon">💰</span> Budgets
+    </div>
+
+    <div class="nav-section-label">Developer Tools</div>
+    <a class="nav-item" href="/docs" target="_blank">
+      <span class="nav-icon">📖</span> API Reference
+    </a>
+    <a class="nav-item" href="/playground" target="_blank">
+      <span class="nav-icon">🚀</span> Prompting Studio
+    </a>
+  </nav>
+
+  <!-- Main Area -->
+  <main id="main">
+
+    <!-- ── Virtual Keys Page ─────────────────────────────────────────────── -->
+    <div class="page active" id="page-keys">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Virtual Keys</div>
+          <div class="page-sub">Manage API keys for gateway access</div>
+        </div>
+        <button class="btn btn-primary" id="btn-create-key" onclick="openCreateKeyModal()">
+          <span>+</span> Create New Key
+        </button>
+      </div>
+
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <span class="result-count" id="keys-count">Loading…</span>
+            <button class="btn btn-ghost btn-sm" onclick="loadKeys()">↻ Fetch</button>
+          </div>
+          <div class="table-toolbar-right">
+            <input class="search-input" id="keys-search" type="search" placeholder="🔍  Search keys…" oninput="filterKeys()" />
+          </div>
+        </div>
+
+        <div id="keys-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+
+        <div class="table-footer">
+          <span class="result-count" id="keys-page-info">—</span>
+          <div class="pagination">
+            <button class="page-btn" id="keys-prev" onclick="keysPage(-1)" disabled>← Prev</button>
+            <button class="page-btn" id="keys-next" onclick="keysPage(1)" disabled>Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Playground Page ───────────────────────────────────────────────── -->
+    <div class="page" id="page-playground">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Playground</div>
+          <div class="page-sub">Send prompts through the OptiLLM Gateway in real-time</div>
+        </div>
+      </div>
+
+      <div class="playground-grid">
+        <!-- Left: Input -->
+        <div class="play-panel">
+          <div class="play-panel-title">✏️ Prompt Input</div>
+
+          <div>
+            <div class="form-label" style="margin-bottom:8px">Model</div>
+            <select class="form-select" id="play-model">
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            </select>
+          </div>
+
+          <div>
+            <div class="form-label" style="margin-bottom:8px">Presets</div>
+            <div class="preset-chips">
+              <div class="preset-chip" onclick="setPreset('Explain machine learning in one short sentence.')">⚡ Simple</div>
+              <div class="preset-chip" onclick="setPreset('Write a Python function for quicksort with comments.')">💻 Code</div>
+              <div class="preset-chip" onclick="setPreset('What is quantum computing? Explain simply.')">🔁 Cache Test</div>
+            </div>
+          </div>
+
+          <textarea class="prompt-area" id="play-prompt" rows="9" placeholder="Type your prompt here…">Explain machine learning in one short sentence.</textarea>
+
+          <div style="display:flex;align-items:center;gap:10px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-2);cursor:pointer;">
+              <input type="checkbox" id="play-bypass" checked style="accent-color:var(--accent);width:15px;height:15px;" />
+              Bypass Cache
+            </label>
+          </div>
+
+          <button class="btn btn-primary" id="play-send-btn" onclick="sendPlayground()" style="width:100%;justify-content:center;padding:12px 0;">
+            Send to OptiLLM Gateway →
+          </button>
+        </div>
+
+        <!-- Right: Output -->
+        <div class="play-panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--card-border);padding-bottom:12px;">
+            <div class="play-panel-title">📊 Live Telemetry</div>
+            <span id="play-http-badge"></span>
+          </div>
+
+          <div class="telemetry-grid">
+            <div class="tele-card">
+              <div class="tele-label">Cache</div>
+              <div class="tele-value" id="tele-cache" style="color:var(--text-3)">—</div>
+            </div>
+            <div class="tele-card">
+              <div class="tele-label">Model Used</div>
+              <div class="tele-value" id="tele-model" style="font-size:11px;color:var(--cyan)">—</div>
+            </div>
+            <div class="tele-card">
+              <div class="tele-label">Latency</div>
+              <div class="tele-value" id="tele-latency" style="color:var(--text-3)">—</div>
+            </div>
+            <div class="tele-card">
+              <div class="tele-label">Complexity</div>
+              <div class="tele-value" id="tele-complexity" style="color:var(--accent-light)">—</div>
+            </div>
+            <div class="tele-card">
+              <div class="tele-label">Cost</div>
+              <div class="tele-value" id="tele-cost" style="color:var(--amber)">—</div>
+            </div>
+            <div class="tele-card">
+              <div class="tele-label">Saved</div>
+              <div class="tele-value" id="tele-saved" style="color:var(--emerald)">—</div>
+            </div>
+          </div>
+
+          <div id="play-routing-banner" style="display:none;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:11px 14px;font-size:12px;color:#93c5fd;line-height:1.5;"></div>
+
+          <div class="tab-bar">
+            <button class="tab-btn active" id="tab-response" onclick="switchPlayTab('response')">💬 Response</button>
+            <button class="tab-btn" id="tab-json" onclick="switchPlayTab('json')">📄 Raw JSON</button>
+          </div>
+
+          <div class="response-box" id="play-response-box">
+            <span style="color:var(--text-3);font-style:italic">Send a prompt to see the assistant response and live telemetry.</span>
+          </div>
+
+          <pre class="response-box" id="play-json-box" style="display:none;font-family:var(--font-mono);font-size:11px;color:var(--cyan)"><span style="color:var(--text-3);font-style:italic">// Raw JSON will appear here.</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Models Page ───────────────────────────────────────────────────── -->
+    <div class="page" id="page-models">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Models + Endpoints</div>
+          <div class="page-sub">All models available through the OptiLLM Gateway</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadModels()">↻ Refresh</button>
+      </div>
+
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <span class="result-count" id="models-count">Loading…</span>
+          </div>
+          <div class="table-toolbar-right">
+            <input class="search-input" id="models-search" type="search" placeholder="🔍  Filter models…" oninput="filterModels()" />
+          </div>
+        </div>
+        <div id="models-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Analytics Page ───────────────────────────────────────────────── -->
+    <div class="page" id="page-analytics">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Usage & Analytics</div>
+          <div class="page-sub">Gateway performance metrics and cost breakdown</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAnalytics()">↻ Refresh</button>
+      </div>
+
+      <div class="kpi-grid" id="analytics-kpis">
+        <div class="kpi-card"><div class="kpi-label">Loading</div><div class="kpi-value"><div class="spinner"></div></div></div>
+      </div>
+
+      <!-- Cost Attribution & Savings Waterfall (Phase 6.3) -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:16px;margin-bottom:24px;">
+        <div class="table-card" style="margin-bottom:0">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left"><b style="font-size:13px;color:var(--text-1)">💰 Savings Waterfall</b></div>
+          </div>
+          <div id="analytics-waterfall-wrap" style="padding:16px 20px;">
+            <div class="spinner"></div>
+          </div>
+        </div>
+        <div class="table-card" style="margin-bottom:0">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left"><b style="font-size:13px;color:var(--text-1)">📊 Spend by Model</b></div>
+          </div>
+          <div id="analytics-models-wrap">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Provider Latencies & SLA Compliance (Phase 6.3) -->
+      <div class="table-card" style="margin-bottom:24px">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <b style="font-size:13px;color:var(--text-1)">⚡ Provider Latencies & SLA Compliance</b>
+          </div>
+        </div>
+        <div id="analytics-sla-wrap">
+          <div class="spinner"></div>
+        </div>
+      </div>
+
+      <!-- Shadow-Mode Router Disagreements -->
+      <div class="table-card" style="margin-bottom:24px">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <b style="font-size:13px;color:var(--text-1)">🔀 Router Shadow-Mode Disagreements</b>
+          </div>
+          <div class="table-toolbar-right" style="font-size:11px;color:var(--text-3)">
+            Rule-based vs AI router disagreed — shadow mode only observes, never acts
+          </div>
+        </div>
+        <div id="analytics-shadow-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <b style="font-size:13px;color:var(--text-1)">Recent Requests</b>
+          </div>
+        </div>
+        <div id="analytics-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Logs Page ─────────────────────────────────────────────────────── -->
+    <div class="page" id="page-logs">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Request Logs</div>
+          <div class="page-sub">Full audit trail of all gateway requests</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadLogs()">↻ Refresh</button>
+      </div>
+
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <span class="result-count" id="logs-count">Loading…</span>
+          </div>
+        </div>
+        <div id="logs-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cache Page ────────────────────────────────────────────────────── -->
+    <div class="page" id="page-cache">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Semantic Cache</div>
+          <div class="page-sub">FAISS vector cache health, stats, and management</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="warmCache()">🔥 Warm Cache</button>
+          <button class="btn btn-danger btn-sm" onclick="clearCache()">🗑 Clear Cache</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadCache()">↻ Refresh</button>
+        </div>
+      </div>
+
+      <div class="cache-grid" id="cache-kpis">
+        <div class="kpi-card"><div class="kpi-label">Loading</div><div class="kpi-value"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ── Providers Page ────────────────────────────────────────────────── -->
+    <div class="page" id="page-providers">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Provider Status</div>
+          <div class="page-sub">Real-time health, circuit breaker state, and latency for all providers</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadProviders()">↻ Refresh</button>
+      </div>
+      <div class="provider-grid" id="providers-grid">
+        <div class="kpi-card"><div class="kpi-value"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ── Budgets Page ──────────────────────────────────────────────────── -->
+    <div class="page" id="page-budgets">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Budgets</div>
+          <div class="page-sub">Daily and monthly spend limits per API key</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadBudgets()">↻ Refresh</button>
+      </div>
+
+      <div class="table-card">
+        <div class="table-toolbar">
+          <span class="result-count" id="budgets-count">Loading…</span>
+        </div>
+        <div id="budgets-table-wrap">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Create Key Modal ──────────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal-create-key">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Create New API Key</div>
+      <button class="modal-close" onclick="closeModal('modal-create-key')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Key Alias (name)</label>
+        <input class="form-input" id="ck-name" type="text" placeholder="e.g. production-app" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Project</label>
+        <input class="form-input" id="ck-project" type="text" placeholder="e.g. my-llm-app" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Expires In (days)</label>
+        <input class="form-input" id="ck-expires" type="number" min="1" placeholder="Leave blank = no expiry" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-key')">Cancel</button>
+      <button class="btn btn-primary" id="ck-submit-btn" onclick="submitCreateKey()">Create Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Key Created Modal ─────────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal-key-created">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🎉 Key Created Successfully</div>
+      <button class="modal-close" onclick="closeModal('modal-key-created')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-2);line-height:1.6;">
+        Store this API key safely — it <strong style="color:var(--rose)">will not be shown again</strong>.
+      </p>
+      <div class="form-group">
+        <label class="form-label">API Key</label>
+        <div class="copy-wrap">
+          <div class="key-reveal" id="new-key-display">—</div>
+          <button class="copy-btn" onclick="copyKey()">Copy</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Key ID</label>
+        <input class="form-input" id="new-key-id" readonly style="font-family:var(--font-mono);font-size:12px;color:var(--accent-light)" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('modal-key-created')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Revoke Confirm Modal ──────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="modal-revoke">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Revoke API Key</div>
+      <button class="modal-close" onclick="closeModal('modal-revoke')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-2);line-height:1.6;">
+        Are you sure you want to revoke key <strong id="revoke-key-name" style="color:var(--text-1)">—</strong>?
+        This action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-revoke')">Cancel</button>
+      <button class="btn btn-danger" id="revoke-confirm-btn" onclick="confirmRevoke()">Revoke Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast Container ───────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<script>
+// ──────────────────────────────────────────────────────────────────────────────
+// State
+// ──────────────────────────────────────────────────────────────────────────────
+const BASE = window.location.origin;
+
+let keysData = [];
+let keysFiltered = [];
+let keysPageNum = 1;
+const KEYS_PER_PAGE = 20;
+
+let modelsData = [];
+let modelsFiltered = [];
+
+let revokeKeyId = null;
+let activePlayTab = 'response';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SPA Router
+// ──────────────────────────────────────────────────────────────────────────────
+const PAGES = ['keys','playground','models','analytics','logs','cache','providers','budgets'];
+
+function navigate(page) {
+  if (!PAGES.includes(page)) page = 'keys';
+
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-page]').forEach(el => el.classList.remove('active'));
+
+  const pageEl = document.getElementById('page-' + page);
+  const navEl = document.getElementById('nav-' + page);
+  if (pageEl) pageEl.classList.add('active');
+  if (navEl) navEl.classList.add('active');
+
+  // Lazy-load page data
+  const loaders = {
+    keys: loadKeys,
+    models: loadModels,
+    analytics: loadAnalytics,
+    logs: loadLogs,
+    cache: loadCache,
+    providers: loadProviders,
+    budgets: loadBudgets,
+  };
+  if (loaders[page]) loaders[page]();
+}
+
+document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+  el.addEventListener('click', () => navigate(el.dataset.page));
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Toast
+// ──────────────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'info', duration = 3500) {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span>${icons[type]}</span><span>${msg}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Modal Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// Close on backdrop click
+document.querySelectorAll('.modal-backdrop').forEach(bd => {
+  bd.addEventListener('click', e => { if (e.target === bd) bd.classList.remove('open'); });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Gateway health check
+// ──────────────────────────────────────────────────────────────────────────────
+async function checkGateway() {
+  try {
+    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      document.getElementById('gateway-url').textContent = `Connected · ${BASE}`;
+      document.getElementById('gateway-badge').style.borderColor = 'rgba(16,185,129,.25)';
+    } else throw new Error();
+  } catch {
+    document.getElementById('gateway-url').textContent = 'Gateway Unreachable';
+    document.getElementById('gateway-badge').style.borderColor = 'rgba(244,63,94,.25)';
+    document.getElementById('gateway-badge').style.color = 'var(--rose)';
+    document.querySelector('#gateway-badge .badge-dot').style.background = 'var(--rose)';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Virtual Keys
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadKeys() {
+  document.getElementById('keys-table-wrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  document.getElementById('keys-count').textContent = 'Loading…';
+  try {
+    const res = await fetch(`${BASE}/v1/keys`);
+    const data = await res.json();
+    keysData = data.keys || [];
+    keysFiltered = [...keysData];
+    keysPageNum = 1;
+    renderKeysTable();
+    document.getElementById('keys-count').textContent = `Showing ${keysFiltered.length} of ${keysData.length} results`;
+  } catch (e) {
+    document.getElementById('keys-table-wrap').innerHTML = `<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-text">Failed to load keys. Is the gateway running?</div></div>`;
+    document.getElementById('keys-count').textContent = 'Error';
+  }
+}
+
+function filterKeys() {
+  const q = document.getElementById('keys-search').value.toLowerCase();
+  keysFiltered = keysData.filter(k =>
+    (k.key_id || '').toLowerCase().includes(q) ||
+    (k.name || '').toLowerCase().includes(q) ||
+    (k.project || '').toLowerCase().includes(q)
+  );
+  keysPageNum = 1;
+  renderKeysTable();
+  document.getElementById('keys-count').textContent = `Showing ${keysFiltered.length} of ${keysData.length} results`;
+}
+
+function keysPage(dir) {
+  keysPageNum += dir;
+  renderKeysTable();
+}
+
+function renderKeysTable() {
+  const total = keysFiltered.length;
+  const totalPages = Math.max(1, Math.ceil(total / KEYS_PER_PAGE));
+  keysPageNum = Math.max(1, Math.min(keysPageNum, totalPages));
+  const start = (keysPageNum - 1) * KEYS_PER_PAGE;
+  const slice = keysFiltered.slice(start, start + KEYS_PER_PAGE);
+
+  document.getElementById('keys-page-info').textContent = `Page ${keysPageNum} of ${totalPages}`;
+  document.getElementById('keys-prev').disabled = keysPageNum <= 1;
+  document.getElementById('keys-next').disabled = keysPageNum >= totalPages;
+
+  if (!slice.length) {
+    document.getElementById('keys-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">🔑</div><div class="es-text">No API keys found. Create one to get started.</div></div>';
+    return;
+  }
+
+  const rows = slice.map(k => {
+    const created = k.created_at ? new Date(k.created_at * 1000).toLocaleDateString() : '—';
+    const lastUsed = k.last_used_at ? new Date(k.last_used_at * 1000).toLocaleDateString() : 'Never';
+    const status = k.is_active
+      ? `<span class="badge badge-green"><span class="badge-dot"></span>Active</span>`
+      : `<span class="badge badge-red"><span class="badge-dot"></span>Revoked</span>`;
+    const scopes = (k.scopes || ['chat']).join(', ');
+    const shortId = (k.key_id || '').substring(0, 12) + '…';
+    return `<tr>
+      <td class="td-id" title="${k.key_id}">${shortId}</td>
+      <td style="color:var(--text-1);font-weight:500">${k.name || '—'}</td>
+      <td>${status}</td>
+      <td class="td-mono">sk-…${(k.key_id || '').slice(-4)}</td>
+      <td>${k.project || '—'}</td>
+      <td style="color:var(--text-3)">${scopes}</td>
+      <td>${created}</td>
+      <td>${lastUsed}</td>
+      <td>
+        ${k.is_active ? `<button class="btn btn-danger btn-sm" onclick="openRevokeModal('${k.key_id}','${k.name || k.key_id}')">Revoke</button>` : '<span style="color:var(--text-3);font-size:12px">—</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('keys-table-wrap').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Key ID</th>
+          <th>Alias</th>
+          <th>Status</th>
+          <th>Secret Key</th>
+          <th>Project</th>
+          <th>Scopes</th>
+          <th>Created At</th>
+          <th>Last Used</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function openCreateKeyModal() {
+  document.getElementById('ck-name').value = '';
+  document.getElementById('ck-project').value = '';
+  document.getElementById('ck-expires').value = '';
+  openModal('modal-create-key');
+}
+
+async function submitCreateKey() {
+  const btn = document.getElementById('ck-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  const payload = {
+    name: document.getElementById('ck-name').value.trim() || null,
+    project: document.getElementById('ck-project').value.trim() || null,
+    expires_in_days: parseInt(document.getElementById('ck-expires').value) || null,
+  };
+  try {
+    const res = await fetch(`${BASE}/v1/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    const data = await res.json();
+    closeModal('modal-create-key');
+    document.getElementById('new-key-display').textContent = data.api_key;
+    document.getElementById('new-key-id').value = data.key_id;
+    openModal('modal-key-created');
+    loadKeys();
+    toast('API key created successfully!', 'success');
+  } catch (e) {
+    toast(`Error: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Key';
+  }
+}
+
+function copyKey() {
+  navigator.clipboard.writeText(document.getElementById('new-key-display').textContent);
+  toast('API key copied to clipboard', 'success', 2000);
+}
+
+function openRevokeModal(keyId, name) {
+  revokeKeyId = keyId;
+  document.getElementById('revoke-key-name').textContent = name;
+  openModal('modal-revoke');
+}
+
+async function confirmRevoke() {
+  if (!revokeKeyId) return;
+  const btn = document.getElementById('revoke-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Revoking…';
+  try {
+    const res = await fetch(`${BASE}/v1/keys/${revokeKeyId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+    closeModal('modal-revoke');
+    loadKeys();
+    toast('API key revoked', 'success');
+  } catch (e) {
+    toast(`Error: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Revoke Key';
+    revokeKeyId = null;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Models
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadModels() {
+  document.getElementById('models-table-wrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch(`${BASE}/v1/models`);
+    const data = await res.json();
+    modelsData = data.data || [];
+    modelsFiltered = [...modelsData];
+    renderModelsTable();
+    document.getElementById('models-count').textContent = `${modelsData.length} models available`;
+  } catch {
+    document.getElementById('models-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-text">Failed to load models.</div></div>';
+  }
+}
+
+function filterModels() {
+  const q = document.getElementById('models-search').value.toLowerCase();
+  modelsFiltered = modelsData.filter(m =>
+    m.id.toLowerCase().includes(q) || (m.owned_by || '').toLowerCase().includes(q)
+  );
+  renderModelsTable();
+  document.getElementById('models-count').textContent = `${modelsFiltered.length} of ${modelsData.length} models`;
+}
+
+function renderModelsTable() {
+  if (!modelsFiltered.length) {
+    document.getElementById('models-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">🤖</div><div class="es-text">No models found.</div></div>';
+    return;
+  }
+
+  const providerIcon = { openai: '🟢', google: '🔵', anthropic: '🟠', 'meta-ollama': '🦙', 'mistral-ollama': '🟣' };
+
+  const rows = modelsFiltered.map(m => {
+    const icon = providerIcon[m.owned_by] || '⚙️';
+    const ctx = m.context_window ? (m.context_window >= 1000000 ? `${(m.context_window/1000000).toFixed(1)}M` : `${(m.context_window/1000).toFixed(0)}K`) : '—';
+    const inCost = m.input_cost_per_1m ? `$${m.input_cost_per_1m.toFixed(2)}` : 'Free';
+    const outCost = m.output_cost_per_1m ? `$${m.output_cost_per_1m.toFixed(2)}` : 'Free';
+    const caps = m.capabilities || {};
+    const capChips = [
+      caps.supports_tools ? '<span class="cap-chip">Tools</span>' : '',
+      caps.supports_structured_output ? '<span class="cap-chip">Structured</span>' : '',
+      '<span class="cap-chip">Streaming</span>',
+    ].filter(Boolean).join('');
+    return `<tr>
+      <td style="color:var(--text-1);font-weight:600">${icon} ${m.id}</td>
+      <td style="color:var(--text-2)">${m.owned_by || '—'}</td>
+      <td style="color:var(--cyan);font-family:var(--font-mono);font-size:12px">${ctx}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--amber)">${inCost}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--emerald)">${outCost}</td>
+      <td>${capChips}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('models-table-wrap').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Model ID</th>
+          <th>Provider</th>
+          <th>Context Window</th>
+          <th>Input / 1M</th>
+          <th>Output / 1M</th>
+          <th>Capabilities</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Analytics
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadAnalytics() {
+  document.getElementById('analytics-kpis').innerHTML = '<div class="kpi-card"><div class="kpi-value"><div class="spinner"></div></div></div>';
+  document.getElementById('analytics-table-wrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  document.getElementById('analytics-shadow-wrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const [resAnalytics, resAttribution, resShadow, resRoutingStats] = await Promise.all([
+      fetch(`${BASE}/api/v1/analytics`),
+      fetch(`${BASE}/api/v1/analytics/cost-attribution`).catch(() => null),
+      fetch(`${BASE}/api/v1/routing/shadow-disagreements?limit=20`).catch(() => null),
+      fetch(`${BASE}/api/v1/routing/stats`).catch(() => null),
+    ]);
+    const data = await resAnalytics.json();
+    renderAnalyticsKPIs(data.summary || {});
+    renderRecentRequests(data.recent_requests || []);
+
+    if (resAttribution && resAttribution.ok) {
+      const attr = await resAttribution.json();
+      renderSavingsWaterfall(attr.savings_waterfall);
+      renderModelAttribution(attr.cost_by_model);
+      renderSLATable(attr.provider_latencies, attr.sla_compliance);
+    }
+
+    const shadowData = (resShadow && resShadow.ok) ? await resShadow.json() : null;
+    const routingStats = (resRoutingStats && resRoutingStats.ok) ? await resRoutingStats.json() : null;
+    renderShadowDisagreements(shadowData, routingStats);
+  } catch {
+    document.getElementById('analytics-kpis').innerHTML = '<div class="kpi-card"><div class="kpi-label">Error</div><div class="kpi-value" style="color:var(--rose);font-size:16px">Failed to load</div></div>';
+  }
+}
+
+function renderSavingsWaterfall(w) {
+  const el = document.getElementById('analytics-waterfall-wrap');
+  if (!el) return;
+  if (!w) {
+    el.innerHTML = '<div style="color:var(--text-3)">No savings data available yet.</div>';
+    return;
+  }
+  const gross = w.gross_spend_usd ?? 0;
+  const net = w.net_spend_usd ?? 0;
+  const saved = w.total_savings_usd ?? 0;
+  const pct = w.savings_percentage ?? 0;
+  const b = w.breakdown || {};
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;text-transform:uppercase;color:var(--text-3);font-weight:700">Gross Baseline Spend</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-1)">$${gross.toFixed(4)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;text-transform:uppercase;color:var(--text-3);font-weight:700">Total Net Saved</div>
+        <div style="font-size:18px;font-weight:700;color:var(--emerald)">$${saved.toFixed(4)} <span style="font-size:12px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,.15)">-${pct}%</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;margin-top:14px">
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--hover-bg);border-radius:6px">
+        <span>⚡ Semantic Caching</span>
+        <b style="color:var(--emerald)">+$${(b.semantic_cache_usd || 0).toFixed(4)}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--hover-bg);border-radius:6px">
+        <span>🗜️ Context Compression</span>
+        <b style="color:var(--cyan)">+$${(b.context_compression_usd || 0).toFixed(4)}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--hover-bg);border-radius:6px">
+        <span>🧠 Intelligent Routing</span>
+        <b style="color:var(--accent-light)">+$${(b.model_routing_usd || 0).toFixed(4)}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;border-top:1px solid var(--card-border);margin-top:4px">
+        <span><b>Actual Net Cost:</b></span>
+        <b style="color:var(--amber);font-family:var(--font-mono)">$${net.toFixed(4)}</b>
+      </div>
+    </div>
+  `;
+}
+
+function renderShadowDisagreements(shadowData, routingStats) {
+  const el = document.getElementById('analytics-shadow-wrap');
+  if (!el) return;
+
+  const rate = routingStats && typeof routingStats.shadow_disagreement_rate === 'number'
+    ? (routingStats.shadow_disagreement_rate * 100).toFixed(2) + '%'
+    : '—';
+  const count = routingStats && typeof routingStats.shadow_disagreement_count === 'number'
+    ? routingStats.shadow_disagreement_count
+    : (shadowData ? shadowData.count : 0);
+
+  const rows = shadowData && shadowData.disagreements ? shadowData.disagreements : [];
+
+  if (!rows.length) {
+    el.innerHTML = `
+      <div style="padding:16px 20px;color:var(--text-3);font-size:12px">
+        No shadow-mode disagreements recorded yet (disagreement rate: ${rate} across all requests).
+        This shows up when <code>ROUTING_MODE=shadow</code> and the AI router's predicted complexity
+        differs from the rule-based router's — a signal for whether promoting the AI router out of
+        shadow mode would change routing decisions.
+      </div>`;
+    return;
+  }
+
+  const rowsHtml = rows.map(r => `
+    <tr>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--text-3)">${r.timestamp ? new Date(r.timestamp).toLocaleString() : '—'}</td>
+      <td style="max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(r.prompt_snippet || '').replace(/</g, '&lt;')}</td>
+      <td>${r.model_requested || '—'}</td>
+      <td><span style="padding:2px 6px;border-radius:4px;background:rgba(99,102,241,.15);font-size:11px">${r.ai_predicted_complexity || 'unknown'}</span></td>
+    </tr>
+  `).join('');
+
+  el.innerHTML = `
+    <div style="padding:10px 20px;font-size:12px;color:var(--text-3);border-bottom:1px solid var(--card-border)">
+      ${count} disagreement${count === 1 ? '' : 's'} recorded — disagreement rate: <b style="color:var(--text-1)">${rate}</b> of all requests
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Prompt</th><th>Requested Model</th><th>AI Router Would Choose</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function renderModelAttribution(models) {
+  const el = document.getElementById('analytics-models-wrap');
+  if (!el) return;
+  if (!models || !models.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px"><div class="es-text">No model traffic logged yet.</div></div>';
+    return;
+  }
+  const rows = models.slice(0, 5).map(m => `
+    <tr>
+      <td class="log-row-model">${m.model}</td>
+      <td style="text-align:right">${m.requests}</td>
+      <td style="text-align:right;font-family:var(--font-mono);color:var(--amber)">$${m.cost_usd.toFixed(4)}</td>
+      <td style="text-align:right"><span class="badge badge-gray">${m.percent_of_total}%</span></td>
+    </tr>
+  `).join('');
+
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th style="text-align:right">Requests</th>
+          <th style="text-align:right">Spend</th>
+          <th style="text-align:right">% Spend</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderSLATable(providers, sla) {
+  const el = document.getElementById('analytics-sla-wrap');
+  if (!el) return;
+  const compliance = sla?.compliance_rate ?? 100.0;
+  const isCompliant = compliance >= 99.0;
+  const statusBadge = isCompliant
+    ? `<span class="badge badge-green">✓ Compliant (${compliance}%)</span>`
+    : `<span class="badge badge-red">⚠ At Risk (${compliance}%)</span>`;
+
+  let rows = '';
+  if (providers && providers.length) {
+    rows = providers.map(p => `
+      <tr>
+        <td><b>${p.provider}</b></td>
+        <td style="text-align:right">${p.requests}</td>
+        <td style="text-align:right;font-family:var(--font-mono)">${p.avg_latency_ms}ms</td>
+        <td style="text-align:right;font-family:var(--font-mono);color:var(--emerald)">${p.p50_latency_ms}ms</td>
+        <td style="text-align:right;font-family:var(--font-mono);color:var(--amber)">${p.p95_latency_ms}ms</td>
+        <td style="text-align:right;font-family:var(--font-mono);color:var(--rose)">${p.p99_latency_ms}ms</td>
+      </tr>
+    `).join('');
+  } else {
+    rows = '<tr><td colspan="6" style="text-align:center;color:var(--text-3);padding:14px">No provider latency records yet.</td></tr>';
+  }
+
+  el.innerHTML = `
+    <div style="padding:10px 16px;border-bottom:1px solid var(--card-border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--text-2)">Tenant Latency Target: <b>${sla?.sla_target_ms || 500}ms</b></span>
+      ${statusBadge}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th style="text-align:right">Requests</th>
+          <th style="text-align:right">Avg Latency</th>
+          <th style="text-align:right">P50</th>
+          <th style="text-align:right">P95</th>
+          <th style="text-align:right">P99</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderAnalyticsKPIs(s) {
+  const kpis = [
+    { label: 'Total Requests', value: (s.total_requests ?? 0).toLocaleString(), sub: 'all time', accent: '' },
+    { label: 'Total Cost', value: `$${(s.total_cost_usd ?? 0).toFixed(4)}`, sub: 'USD spent', accent: 'kpi-accent-amber' },
+    { label: 'Total Saved', value: `$${(s.total_savings_usd ?? 0).toFixed(4)}`, sub: 'via caching + routing', accent: 'kpi-accent-emerald' },
+    { label: 'Cache Hit Rate', value: `${((s.cache_hit_rate ?? 0) * 100).toFixed(1)}%`, sub: 'semantic cache', accent: 'kpi-accent-cyan' },
+    { label: 'Avg Latency', value: s.avg_latency_ms ? `${Math.round(s.avg_latency_ms)}ms` : '—', sub: 'p50 end-to-end', accent: 'kpi-accent-indigo' },
+    { label: 'Unique Models', value: (s.unique_models ?? 0), sub: 'models used', accent: '' },
+  ];
+  document.getElementById('analytics-kpis').innerHTML = kpis.map(k => `
+    <div class="kpi-card ${k.accent}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join('');
+}
+
+function renderRecentRequests(requests) {
+  if (!requests.length) {
+    document.getElementById('analytics-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">📋</div><div class="es-text">No requests logged yet.</div></div>';
+    return;
+  }
+  const rows = requests.map(r => {
+    const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
+    const cacheHit = r.cache_hit
+      ? '<span class="badge badge-green">HIT</span>'
+      : '<span class="badge badge-gray">MISS</span>';
+    const cost = r.cost_usd ? `$${parseFloat(r.cost_usd).toFixed(6)}` : '—';
+    const lat = r.latency_ms ? `${Math.round(r.latency_ms)}ms` : '—';
+    return `<tr>
+      <td style="color:var(--text-3);font-size:12px">${ts}</td>
+      <td class="log-row-model">${r.model_used || '—'}</td>
+      <td>${r.provider || '—'}</td>
+      <td>${cacheHit}</td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--amber)">${cost}</td>
+      <td style="font-family:var(--font-mono);font-size:12px">${lat}</td>
+      <td style="font-family:var(--font-mono);font-size:11px">${r.tokens_in ?? '—'} / ${r.tokens_out ?? '—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('analytics-table-wrap').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Model</th>
+          <th>Provider</th>
+          <th>Cache</th>
+          <th>Cost</th>
+          <th>Latency</th>
+          <th>Tokens In/Out</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Logs
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  document.getElementById('logs-table-wrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch(`${BASE}/api/v1/analytics`);
+    const data = await res.json();
+    const requests = data.recent_requests || [];
+    document.getElementById('logs-count').textContent = `${requests.length} recent log entries`;
+
+    if (!requests.length) {
+      document.getElementById('logs-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">📋</div><div class="es-text">No log entries found.</div></div>';
+      return;
+    }
+
+    const rows = requests.map(r => {
+      const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
+      const cacheHit = r.cache_hit
+        ? '<span class="badge badge-green">HIT</span>'
+        : '<span class="badge badge-gray">MISS</span>';
+      const routed = r.routed ? '<span class="badge badge-blue">Routed</span>' : '—';
+      const compressed = r.compressed ? '<span class="badge badge-yellow">Compressed</span>' : '—';
+      return `<tr>
+        <td style="color:var(--text-3);font-size:11px">${ts}</td>
+        <td class="log-row-model">${r.model_used || '—'}</td>
+        <td>${r.provider || '—'}</td>
+        <td>${cacheHit}</td>
+        <td>${routed}</td>
+        <td>${compressed}</td>
+        <td style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">${r.cost_usd ? '$'+parseFloat(r.cost_usd).toFixed(6) : '—'}</td>
+        <td style="font-family:var(--font-mono);font-size:11px">${r.latency_ms ? Math.round(r.latency_ms)+'ms' : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('logs-table-wrap').innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Model</th>
+            <th>Provider</th>
+            <th>Cache</th>
+            <th>Routing</th>
+            <th>Compression</th>
+            <th>Cost</th>
+            <th>Latency</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch {
+    document.getElementById('logs-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-text">Failed to load logs.</div></div>';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Cache
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadCache() {
+  document.getElementById('cache-kpis').innerHTML = '<div class="kpi-card"><div class="kpi-value"><div class="spinner"></div></div></div>';
+  try {
+    const res = await fetch(`${BASE}/api/v1/cache/stats`);
+    const d = await res.json();
+
+    // API returns: total_cached_responses, active_entries, expired_entries,
+    // faiss_vector_count, similarity_threshold, redis_available,
+    // redis_url, cache_namespace, cache_ttl_seconds
+    const total    = d.total_cached_responses ?? d.total_entries ?? 0;
+    const active   = d.active_entries ?? total;
+    const expired  = d.expired_entries ?? 0;
+    const faiss    = d.faiss_vector_count ?? d.faiss_index_size ?? 0;
+    const redis    = d.redis_available ?? d.redis_connected ?? false;
+    const thresh   = d.similarity_threshold;
+    const ns       = d.cache_namespace ?? d.cache_namespace ?? '—';
+    const ttl      = d.cache_ttl_seconds;
+    const redisUrl = d.redis_url && d.redis_url !== 'not_configured' ? d.redis_url : null;
+
+    const kpis = [
+      { label: 'Total Cached', value: total.toLocaleString(), sub: 'responses in DB', accent: 'kpi-accent-indigo' },
+      { label: 'Active Entries', value: active.toLocaleString(), sub: 'non-expired', accent: 'kpi-accent-emerald' },
+      { label: 'Expired Entries', value: expired.toLocaleString(), sub: 'past TTL', accent: expired > 0 ? 'kpi-accent-amber' : '' },
+      { label: 'FAISS Vectors', value: faiss.toLocaleString(), sub: 'indexed embeddings', accent: '' },
+      {
+        label: 'Redis Cache',
+        value: redis ? '✓ Connected' : '✗ Disabled',
+        sub: redisUrl || 'using local FAISS fallback',
+        accent: redis ? 'kpi-accent-emerald' : '',
+      },
+      { label: 'Similarity Threshold', value: thresh != null ? thresh.toFixed(2) : '—', sub: 'cosine similarity cutoff', accent: 'kpi-accent-cyan' },
+      { label: 'Cache TTL', value: ttl != null ? formatTTL(ttl) : '—', sub: 'per entry', accent: '' },
+      { label: 'Namespace', value: ns, sub: 'active cache partition', accent: '' },
+    ];
+
+    document.getElementById('cache-kpis').innerHTML = kpis.map(k => `
+      <div class="kpi-card ${k.accent}">
+        <div class="kpi-label">${k.label}</div>
+        <div class="kpi-value" style="font-size:18px">${k.value}</div>
+        <div class="kpi-sub">${k.sub}</div>
+      </div>`).join('');
+  } catch (e) {
+    document.getElementById('cache-kpis').innerHTML = `<div class="kpi-card"><div class="kpi-label">Error</div><div class="kpi-value" style="color:var(--rose);font-size:16px">Failed to load</div><div class="kpi-sub">${e.message}</div></div>`;
+  }
+}
+
+function formatTTL(seconds) {
+  if (seconds <= 0) return 'No TTL';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
+async function warmCache() {
+  try {
+    const res = await fetch(`${BASE}/api/v1/cache/warm`, { method: 'POST' });
+    const d = await res.json();
+    toast(`Cache warmed — ${d.warmed_entries ?? 0} entries loaded`, 'success');
+    loadCache();
+  } catch { toast('Failed to warm cache', 'error'); }
+}
+
+async function clearCache() {
+  if (!confirm('Are you sure you want to clear the entire semantic cache? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`${BASE}/api/v1/cache/clear`, { method: 'DELETE' });
+    const d = await res.json();
+    toast(`Cache cleared — ${d.deleted_entries ?? 0} entries removed`, 'success');
+    loadCache();
+  } catch { toast('Failed to clear cache', 'error'); }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Providers
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadProviders() {
+  document.getElementById('providers-grid').innerHTML = '<div class="kpi-card"><div class="kpi-value"><div class="spinner"></div></div></div>';
+  try {
+    const res = await fetch(`${BASE}/api/v1/providers/status`);
+    const data = await res.json();
+    const providers = data.providers || [];
+
+    if (!providers.length) {
+      document.getElementById('providers-grid').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">🔌</div><div class="es-text">No providers found.</div></div>';
+      return;
+    }
+
+    const providerIcons = { openai: '🟢', anthropic: '🟠', gemini: '🔵', ollama: '🦙', groq: '⚡', cohere: '🌊', mistral: '🟣' };
+
+    const cards = providers.map(p => {
+      const icon = providerIcons[p.name] || '⚙️';
+      const healthBadge = p.healthy && p.configured
+        ? `<span class="badge badge-green"><span class="badge-dot"></span>Healthy</span>`
+        : p.configured
+          ? `<span class="badge badge-yellow"><span class="badge-dot"></span>${p.circuit_state}</span>`
+          : `<span class="badge badge-gray">Not Configured</span>`;
+
+      const circuitColor = {
+        CLOSED: 'var(--emerald)',
+        OPEN: 'var(--rose)',
+        HALF_OPEN: 'var(--amber)',
+      }[p.circuit_state] || 'var(--text-3)';
+
+      return `<div class="provider-card">
+        <div class="provider-header">
+          <div class="provider-name"><span class="provider-icon">${icon}</span>${p.name}</div>
+          ${healthBadge}
+        </div>
+        <div class="provider-stat">
+          <span class="provider-stat-label">Circuit Breaker</span>
+          <span class="provider-stat-value" style="color:${circuitColor}">${p.circuit_state || 'CLOSED'}</span>
+        </div>
+        <div class="provider-stat">
+          <span class="provider-stat-label">Latency (p50)</span>
+          <span class="provider-stat-value">${p.latency_ms ? Math.round(p.latency_ms) + 'ms' : '—'}</span>
+        </div>
+        <div class="provider-stat">
+          <span class="provider-stat-label">Failures</span>
+          <span class="provider-stat-value" style="color:${p.consecutive_failures > 0 ? 'var(--rose)' : 'var(--text-2)'}">${p.consecutive_failures ?? 0}</span>
+        </div>
+        <div class="provider-stat">
+          <span class="provider-stat-label">Successes</span>
+          <span class="provider-stat-value" style="color:var(--emerald)">${p.success_count ?? 0}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('providers-grid').innerHTML = cards;
+  } catch {
+    document.getElementById('providers-grid').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">⚠️</div><div class="es-text">Failed to load provider status.</div></div>';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Budgets
+// ──────────────────────────────────────────────────────────────────────────────
+async function loadBudgets() {
+  document.getElementById('budgets-table-wrap').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch(`${BASE}/api/v1/budgets`);
+    const data = await res.json();
+    const budgets = Array.isArray(data) ? data : [];
+    document.getElementById('budgets-count').textContent = `${budgets.length} budget record${budgets.length !== 1 ? 's' : ''}`;
+
+    if (!budgets.length) {
+      document.getElementById('budgets-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">💰</div><div class="es-text">No budget records. Budgets are created automatically when keys are used.</div></div>';
+      return;
+    }
+
+    const rows = budgets.map(b => {
+      const dailyPct = b.daily_budget_usd > 0 ? Math.min(100, (b.daily_spent_usd / b.daily_budget_usd) * 100) : 0;
+      const monthlyPct = b.monthly_budget_usd > 0 ? Math.min(100, (b.monthly_spent_usd / b.monthly_budget_usd) * 100) : 0;
+      const warnD = dailyPct >= 80;
+      const warnM = monthlyPct >= 80;
+      const shortKey = b.api_key ? b.api_key.substring(0, 16) + '…' : '—';
+      return `<tr>
+        <td class="td-mono" title="${b.api_key}">${shortKey}</td>
+        <td>
+          <div class="budget-bar-wrap">
+            <div class="budget-bar-label">
+              <span>$${b.daily_spent_usd?.toFixed(4)} / $${b.daily_budget_usd?.toFixed(2)}</span>
+              <span>${dailyPct.toFixed(0)}%</span>
+            </div>
+            <div class="budget-bar"><div class="budget-bar-fill ${warnD ? 'warn' : ''}" style="width:${dailyPct}%"></div></div>
+          </div>
+        </td>
+        <td>
+          <div class="budget-bar-wrap">
+            <div class="budget-bar-label">
+              <span>$${b.monthly_spent_usd?.toFixed(4)} / $${b.monthly_budget_usd?.toFixed(2)}</span>
+              <span>${monthlyPct.toFixed(0)}%</span>
+            </div>
+            <div class="budget-bar"><div class="budget-bar-fill ${warnM ? 'warn' : ''}" style="width:${monthlyPct}%"></div></div>
+          </div>
+        </td>
+        <td style="color:var(--emerald);font-family:var(--font-mono);font-size:12px">$${b.daily_remaining_usd?.toFixed(4)}</td>
+        <td style="color:var(--emerald);font-family:var(--font-mono);font-size:12px">$${b.monthly_remaining_usd?.toFixed(4)}</td>
+        <td style="color:var(--text-3);font-size:12px">${b.last_reset_day || '—'}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('budgets-table-wrap').innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>API Key</th>
+            <th>Daily Budget</th>
+            <th>Monthly Budget</th>
+            <th>Daily Remaining</th>
+            <th>Monthly Remaining</th>
+            <th>Last Reset</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch {
+    document.getElementById('budgets-table-wrap').innerHTML = '<div class="empty-state"><div class="es-icon">⚠️</div><div class="es-text">Failed to load budgets.</div></div>';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Playground
+// ──────────────────────────────────────────────────────────────────────────────
+function setPreset(text) {
+  document.getElementById('play-prompt').value = text;
+}
+
+function switchPlayTab(tab) {
+  activePlayTab = tab;
+  document.getElementById('tab-response').classList.toggle('active', tab === 'response');
+  document.getElementById('tab-json').classList.toggle('active', tab === 'json');
+  document.getElementById('play-response-box').style.display = tab === 'response' ? 'block' : 'none';
+  document.getElementById('play-json-box').style.display = tab === 'json' ? 'block' : 'none';
+}
+
+async function sendPlayground() {
+  const prompt = document.getElementById('play-prompt').value.trim();
+  if (!prompt) return;
+  const model = document.getElementById('play-model').value;
+  const bypass = document.getElementById('play-bypass').checked;
+  const btn = document.getElementById('play-send-btn');
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Processing…';
+
+  // Reset telemetry
+  ['tele-cache','tele-model','tele-latency','tele-complexity','tele-cost','tele-saved'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('play-http-badge').innerHTML = '';
+  document.getElementById('play-routing-banner').style.display = 'none';
+  document.getElementById('play-response-box').innerHTML = '<span style="color:var(--text-3);font-style:italic">Waiting for response…</span>';
+  document.getElementById('play-json-box').innerHTML = '<span style="color:var(--text-3);font-style:italic">// Loading…</span>';
+
+  const payload = {
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    optillm: { bypass_cache: bypass, bypass_compression: false, bypass_routing: false },
+  };
+
+  const start = performance.now();
+  try {
+    const res = await fetch(`${BASE}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const elapsed = Math.round(performance.now() - start);
+    const data = await res.json();
+
+    // HTTP badge
+    const badgeClass = res.ok ? 'badge-green' : 'badge-red';
+    document.getElementById('play-http-badge').innerHTML = `<span class="badge ${badgeClass}">HTTP ${res.status} · ${elapsed}ms</span>`;
+
+    if (res.ok) {
+      const content = data.choices?.[0]?.message?.content || 'No response content.';
+      document.getElementById('play-response-box').textContent = content;
+      document.getElementById('play-json-box').textContent = JSON.stringify(data, null, 2);
+
+      const meta = data.optillm_metadata || {};
+      document.getElementById('tele-cache').textContent = meta.cache_hit ? 'HIT ✓' : 'MISS';
+      document.getElementById('tele-cache').style.color = meta.cache_hit ? 'var(--emerald)' : 'var(--text-3)';
+      document.getElementById('tele-model').textContent = meta.model_used || data.model || model;
+      document.getElementById('tele-latency').textContent = meta.latency_ms ? `${meta.latency_ms}ms` : `${elapsed}ms`;
+      document.getElementById('tele-complexity').textContent = meta.complexity ? meta.complexity.toUpperCase() : '—';
+      document.getElementById('tele-cost').textContent = meta.cost_usd != null ? `$${parseFloat(meta.cost_usd).toFixed(6)}` : '—';
+      document.getElementById('tele-saved').textContent = meta.savings_usd != null ? `$${parseFloat(meta.savings_usd).toFixed(6)}` : '—';
+
+      if (meta.routing_reason) {
+        const banner = document.getElementById('play-routing-banner');
+        banner.textContent = `💡 Routing Decision: ${meta.routing_reason}`;
+        banner.style.display = 'block';
+      }
+    } else {
+      document.getElementById('play-response-box').innerHTML = `<span style="color:var(--rose)">Error ${res.status}: ${data.detail || JSON.stringify(data)}</span>`;
+      document.getElementById('play-json-box').textContent = JSON.stringify(data, null, 2);
+    }
+  } catch (e) {
+    document.getElementById('play-response-box').innerHTML = `<span style="color:var(--rose)">Network Error: ${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send to OptiLLM Gateway →';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Init
+// ──────────────────────────────────────────────────────────────────────────────
+checkGateway();
+loadKeys(); // default page
+</script>
+</body>
+</html>

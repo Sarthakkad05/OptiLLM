@@ -1,0 +1,16 @@
+# Prometheus Server Configuration for OptiLLM AI Gateway
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: "optillm-gateway"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["optillm:8000"]
+        labels:
+          env: "production"
+          service: "optillm-gateway"

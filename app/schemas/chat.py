@@ -3,16 +3,20 @@ Pydantic schemas for the OpenAI-compatible chat completions endpoint.
 Mirrors the OpenAI API contract so existing clients work with zero changes.
 """
 
-from typing import List, Literal, Optional
-
+from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 # ── Inbound Request ──────────────────────────────────────────────────────────
 
 
 class ChatMessage(BaseModel):
-    role: Literal["system", "user", "assistant"] = "user"
-    content: str
+    role: str = "user"
+    content: Optional[str] = ""
+    name: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+
+    model_config = {"extra": "allow"}
 
 
 class OptiLLMConfig(BaseModel):
@@ -32,8 +36,17 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = None
-    stream: Optional[bool] = False  # Streaming not supported in MVP
+    stream: Optional[bool] = False
+    top_p: Optional[float] = None
+    n: Optional[int] = 1
+    stop: Optional[Union[str, List[str]]] = None
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+    response_format: Optional[Dict[str, Any]] = None
+    user: Optional[str] = None
     optillm: Optional[OptiLLMConfig] = OptiLLMConfig()
+
+    model_config = {"extra": "allow"}
 
 
 # ── Outbound Response ─────────────────────────────────────────────────────────
@@ -46,14 +59,17 @@ class UsageInfo(BaseModel):
 
 
 class ChoiceMessage(BaseModel):
-    role: str
-    content: str
+    role: str = "assistant"
+    content: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+
+    model_config = {"extra": "allow"}
 
 
 class Choice(BaseModel):
-    index: int
+    index: int = 0
     message: ChoiceMessage
-    finish_reason: str
+    finish_reason: Optional[str] = "stop"
 
 
 class OptiLLMMetadata(BaseModel):

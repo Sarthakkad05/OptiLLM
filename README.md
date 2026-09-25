@@ -1,277 +1,296 @@
-# OptiLLM
+# OptiLLM ⚡
+### Enterprise AI Gateway with Semantic Caching, Intelligent Routing & Online Learning
 
-An AI Gateway that sits between your application and LLM providers — adding **semantic caching**, **context compression**, and **intelligent model routing** to every request, transparently.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110.0-009688.svg)](https://fastapi.tiangolo.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests Passing](https://img.shields.io/badge/tests-166%20passed-brightgreen.svg)]()
+[![Overhead](https://img.shields.io/badge/p50%20overhead-%3C2ms%20(local)-yellow.svg)]()
+[![Benchmarks](https://img.shields.io/badge/benchmarks-local%20synthetic-yellow.svg)](docs/benchmarks.md)
+
+OptiLLM is a high-performance, drop-in replacement for OpenAI API endpoints designed to cut LLM spend by an estimated **40% to 80%** without sacrificing output quality (target based on local benchmarks — live-traffic validation in progress, see [docs/benchmarks.md](docs/benchmarks.md)).
+
+It sits transparently between your applications and LLM providers (OpenAI, Anthropic, Gemini, Groq, Mistral, Azure, Bedrock, and Ollama), executing a 4-tier optimization pipeline: **Semantic Caching**, **Smart Context Compression**, **Intelligent Complexity-Aware Routing**, and an **Online Learning Feedback Loop**.
+
+---
+
+## 🌟 Why OptiLLM? (Feature Comparison)
+
+| Capability | OptiLLM | LiteLLM | Portkey | Direct Provider |
+|---|:---:|:---:|:---:|:---:|
+| **Drop-in OpenAI SDK Compatibility** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ Native Only |
+| **Semantic Vector Cache (FAISS + Redis)** | ✅ Built-in | ⚠️ Plugin only | ✅ Yes | ❌ None |
+| **Self-Learning Router (Continuous Retraining)** | ✅ **Yes (Unique)** — [validated](docs/routing.md#4-does-it-actually-work-real-validation-results) | ❌ Static Rules | ❌ Static Rules | ❌ None |
+| **TF-IDF Informational Context Compression** | ✅ **Yes (Unique)** | ❌ None | ❌ None | ❌ None |
+| **Quality-Attributed Cost Analytics** | ✅ **Yes (Unique)** | ❌ Spend only | ❌ Spend only | ❌ None |
+| **Dual-Mode LLM-as-Judge Evaluation** | ✅ Built-in | ❌ None | ⚠️ Add-on | ❌ None |
+| **Per-Request User Feedback Loop** | ✅ Built-in | ❌ None | ⚠️ Add-on | ❌ None |
+| **K8s Structured Health & Readiness Probes** | ✅ Yes (`/health/ready`) | ⚠️ Basic | ⚠️ Basic | ❌ None |
+| **Provider Fallback & Circuit Breaker** | ✅ Sub-second | ✅ Yes | ✅ Yes | ❌ None |
+| **Sync & Async Python SDK + CLI** | ✅ Native | ⚠️ CLI only | ✅ Yes | ❌ Provider only |
+
+---
+
+## 🏗️ Architecture Pipeline
 
 ```
-Your App ──► OptiLLM Gateway ──► OpenAI / Gemini
-                │
-                ├── Semantic Cache   (skip the LLM call entirely)
-                ├── Compressor       (reduce token count before sending)
-                ├── Router           (use cheapest capable model)
-                └── Analytics        (cost, savings, latency tracking)
+Incoming Request (OpenAI SDK / HTTP)
+       │
+       ▼
+[0. Security & Protection Middleware]
+   ├── API Key Auth & Scopes
+   ├── Token Bucket Rate Limiting (RPM / TPM)
+   └── Request Size Limits (1MB cap, 200 msg cap)
+       │
+       ▼
+[1. Semantic Cache Lookup]
+   ├── Embedding: all-MiniLM-L6-v2 (384d)
+   ├── Tier 1: Redis Vector Search
+   └── Tier 2: FAISS Exact Inner-Product Search
+       ├── HIT (Score ≥ 0.90) ──────────────┐
+       └── MISS                             │
+            │                               │
+            ▼                               │
+[2. Context Compression]                    │
+   ├── Pass 1: Whitespace & Deduplication  │
+   └── Pass 2: Smart TF-IDF Sentence Rank   │
+            │                               │
+            ▼                               │
+[3. Intelligent Model Routing]              │
+   ├── Complexity Classifier                │
+   │    ├── Low  → gpt-4o-mini / gemini     │
+   │    ├── Med  → claude-3-5-haiku / mistral│
+   │    └── High → gpt-4o / claude-3-5-sonnet│
+   └── Shadow Disagreement Logging          │
+            │                               │
+            ▼                               │
+[4. Provider Dispatch & Resilience]         │
+   ├── Circuit Breakers per Provider        │
+   ├── Automatic Retry & Multi-Provider Fallback
+   └── Per-Provider Latency Timeouts        │
+            │                               │
+            ▼                               │
+[5. Post-Execution & Learning Loop]         │
+   ├── Cache Insertion (FAISS + Redis)      │
+   ├── Token Count & Exact Cost Attribution │
+   ├── Quality Judge (Heuristic + 5% LLM)   │
+   └── Feedback API (Triggers Retrain Loop) │
+            │                               │
+            ▼                               │
+     Returned Response ◄────────────────────┘
 ```
 
 ---
 
-## Features
+## ⚡ 5-Minute Quickstart
 
-| Feature | Description |
-|---|---|
-| **Semantic Cache** | Stores LLM responses as dense vector embeddings. Semantically similar follow-up questions are served from cache — no LLM call, zero cost. |
-| **Context Compression** | Two-pass heuristic + token-aware truncation reduces prompt token count before sending to the provider. |
-| **Model Routing** | Rule-based complexity analysis downgrades expensive models to cheaper ones when the task is simple enough. Never upgrades. |
-| **Provider Abstraction** | Unified interface over OpenAI and Gemini. Automatic retry with exponential backoff + cross-provider fallback. |
-| **Mock Mode** | No API keys? The full pipeline runs with simulated responses — useful for local development. |
-| **Analytics API** | Every request is logged. Query cost, savings, cache hit rate, latency, and model distribution over time. |
-| **OpenAI-Compatible** | Drop `http://localhost:8000` as your `base_url` in any OpenAI SDK call. Zero client changes. |
-
----
-
-## Architecture
-
-```
-app/
-├── api/
-│   ├── api.py                  # Router registration
-│   └── endpoints/
-│       ├── health.py           # GET /health
-│       ├── proxy.py            # POST /v1/chat/completions
-│       └── analytics.py        # GET /api/v1/analytics + cache/routing endpoints
-├── core/
-│   ├── config.py               # Pydantic settings (env-driven)
-│   └── logging.py              # Structured logging setup
-├── db/
-│   ├── models.py               # RequestLog, CacheEntry (SQLAlchemy)
-│   └── session.py              # DB engine + session factory
-├── engine/
-│   ├── cache.py                # Semantic cache orchestration
-│   ├── compressor.py           # Context compression pipeline
-│   ├── embedding.py            # SentenceTransformer wrapper (singleton)
-│   ├── faiss_store.py          # FAISS index management
-│   └── router.py               # Rule-based model complexity routing
-├── providers/
-│   ├── dispatcher.py           # Provider selection, retry, fallback
-│   ├── openai_client.py        # OpenAI Chat Completions client
-│   └── gemini_client.py        # Google Gemini generateContent client
-├── schemas/
-│   ├── chat.py                 # Request / response Pydantic models
-│   └── analytics.py            # Analytics response schemas
-├── services/
-│   ├── gateway.py              # Main request pipeline orchestrator
-│   ├── analytics.py            # Analytics aggregation queries
-│   ├── cost_estimator.py       # USD cost calculations
-│   └── token_counter.py        # tiktoken-based token counting
-└── main.py                     # FastAPI app + lifespan
-```
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- At least one API key: `OPENAI_API_KEY` or `GEMINI_API_KEY` (or neither for mock mode)
-
-### Local Development (SQLite)
+### 1. Installation
 
 ```bash
-# 1. Clone and enter the project
-git clone <repo-url>
+# Clone repository
+git clone https://github.com/Sarthakkad05/OptiLLM.git
 cd OptiLLM
 
-# 2. Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-# 3. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# Edit .env — at minimum set OPENAI_API_KEY or GEMINI_API_KEY
-# DATABASE_URL defaults to sqlite:///./optillm.db if not set
-
-# 5. Start the gateway
-uvicorn app.main:app --reload
 ```
 
-The gateway is now running at **http://localhost:8000**.
-
-- API docs: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
-
-### Docker (Postgres)
+### 2. Configure Environment
 
 ```bash
-# Copy and configure environment
+# Copy example configuration
 cp .env.example .env
 
-# Start Postgres + gateway
-docker compose up --build
+# Edit .env and set your API keys (e.g. OPENAI_API_KEY)
+# If no keys are set, OptiLLM automatically operates in local mock mode for development!
 ```
+
+### 3. Launch the Gateway
+
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Verify the gateway is live:
+```bash
+curl http://localhost:8000/health
+# Returns: {"status":"ok","service":"optillm-gateway","version":"1.0.0","database":"connected","uptime_seconds":1.2}
+```
+
+### 4. Or run the full HA stack with Docker Compose
+
+Two gateway replicas behind an nginx load balancer, sharing PostgreSQL and Redis, with Prometheus and Grafana:
+
+```bash
+cp .env.example .env
+docker compose up -d --build --scale optillm=2
+curl http://localhost:8000/health        # via nginx, round-robin across replicas
+```
+
+Grafana is at `http://localhost:3000` (provisioned OptiLLM dashboard). Migrations run automatically on startup and are safe when several replicas boot at once. See the [Production Deployment Guide](docs/deployment.md) for scaling, schema recovery, and validated load-test results.
 
 ---
 
-## Configuration
+## 💻 Usage
 
-All settings are read from environment variables (or `.env`):
+### 1. Drop-in Replacement for OpenAI SDK
 
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | `sqlite:///./optillm.db` | SQLAlchemy database URL |
-| `OPENAI_API_KEY` | `""` | OpenAI API key |
-| `GEMINI_API_KEY` | `""` | Google Gemini API key |
-| `DEFAULT_PROVIDER` | `openai` | Fallback provider when none is specified |
-| `DEFAULT_MODEL` | `gpt-4o` | Fallback model |
-| `FAISS_INDEX_PATH` | `faiss_store/index.faiss` | Path for persisted FAISS vector index |
-| `APP_ENV` | `development` | Environment label |
-| `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-
----
-
-## API Reference
-
-### `POST /v1/chat/completions`
-
-OpenAI-compatible endpoint. Point any OpenAI SDK client at `http://localhost:8000` with no other changes.
-
-**Request body** (OpenAI format + optional `optillm` block):
-
-```json
-{
-  "model": "gpt-4o",
-  "messages": [{"role": "user", "content": "Explain neural networks"}],
-  "temperature": 0.7,
-  "optillm": {
-    "bypass_cache": false,
-    "bypass_compression": false,
-    "bypass_routing": false
-  }
-}
-```
-
-**Response** (OpenAI format + `optillm_metadata`):
-
-```json
-{
-  "id": "chatcmpl-abc123",
-  "model": "gpt-4o-mini",
-  "choices": [...],
-  "usage": {"prompt_tokens": 42, "completion_tokens": 180, "total_tokens": 222},
-  "optillm_metadata": {
-    "cache_hit": false,
-    "compressed": false,
-    "routed": true,
-    "model_requested": "gpt-4o",
-    "model_used": "gpt-4o-mini",
-    "latency_ms": 843,
-    "cost_usd": 0.000114,
-    "savings_usd": 0.00243,
-    "tokens_saved": 0,
-    "routing_reason": "Task complexity=low — downgraded from gpt-4o to gpt-4o-mini.",
-    "complexity": "low"
-  }
-}
-```
-
-### `GET /health`
-
-```json
-{"status": "ok", "service": "optillm-gateway", "database": "connected"}
-```
-
-### `GET /api/v1/analytics`
-
-Returns aggregated KPIs, cost-over-time series, model distribution, and the 50 most recent request logs.
-
-### `GET /api/v1/cache/stats`
-
-Returns semantic cache health: total entries, expired entries, FAISS vector count, similarity threshold.
-
-### `DELETE /api/v1/cache/clear`
-
-Wipes all cached responses and resets the FAISS index.
-
-### `GET /api/v1/router/config`
-
-Returns the current routing table (which model is used per complexity tier).
-
-### `POST /api/v1/router/config`
-
-Update the routing table at runtime (no restart required).
-
-```json
-{"low_model": "gemini-2.0-flash", "medium_model": "gpt-4o-mini"}
-```
-
-### `GET /api/v1/compression/stats`
-
-Returns aggregated token savings from context compression.
-
-### `GET /api/v1/routing/stats`
-
-Returns model routing decisions, routing rate, and savings breakdown.
-
----
-
-## Using with the OpenAI Python SDK
+Just point `base_url` to `http://localhost:8000/v1`:
 
 ```python
 from openai import OpenAI
 
+# Standard OpenAI client pointing to OptiLLM
 client = OpenAI(
-    api_key="your-openai-key",
     base_url="http://localhost:8000/v1",
+    api_key="sk-optillm-dev-key",  # or your OptiLLM key
 )
 
 response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "What is 2 + 2?"}],
+    messages=[{"role": "user", "content": "Explain quantum computing simply."}],
 )
 
-# The response is a standard ChatCompletion object
 print(response.choices[0].message.content)
 ```
 
-OptiLLM handles caching, compression, and routing transparently.
+### 2. Using the Native OptiLLM Python SDK
+
+```python
+from optillm_client import OptiLLMClient
+
+client = OptiLLMClient(base_url="http://localhost:8000", api_key="sk-optillm-dev-key")
+
+# 1. Chat Completion with OptiLLM features
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "What is binary search?"}],
+    bypass_cache=False,
+    tag="production-chatbot",
+)
+print("Answer:", response.content)
+print("Metadata:", response.optillm_metadata)
+
+# 2. Inspect Quality vs Cost Tradeoffs
+tradeoff = client.analytics.quality_cost_tradeoff()
+print("Recommendation:", tradeoff["recommendation"])
+
+# 3. Submit User Feedback (feeder for online learning loop)
+client.feedback.submit(
+    request_id=response.id,
+    rating=1,
+    notes="Fast and accurate reply",
+)
+```
+
+### 3. Native Async Python SDK
+
+```python
+import asyncio
+from optillm_client import AsyncOptiLLMClient
+
+async def main():
+    async with AsyncOptiLLMClient(base_url="http://localhost:8000") as client:
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": "Summarize clean architecture."}],
+        )
+        print(response.content)
+
+asyncio.run(main())
+```
+
+### 4. OptiLLM CLI Tool
+
+```bash
+# Check status and provider health
+python -m optillm_client.cli status
+
+# Send a prompt through the pipeline
+python -m optillm_client.cli chat "What is Shor's algorithm?" --model gpt-4o
+
+# Inspect routing decision for a query
+python -m optillm_client.cli explain "Implement a red-black tree in Rust"
+
+# View real-time analytics
+python -m optillm_client.cli analytics --days 7
+
+# Inspect and manage semantic cache
+python -m optillm_client.cli cache info
+python -m optillm_client.cli cache clear
+```
 
 ---
 
-## Model Routing Logic
+## 🖥️ Admin Dashboard
 
-The router analyzes each request across four dimensions:
+A single-file, zero-build admin UI (`app/static/admin.html`, served at `/admin`) for managing keys, watching live analytics, and testing prompts — no separate frontend deploy required.
 
-| Signal | Weight |
-|---|---|
-| Token count | Low: 0–79 tokens (+0), Medium: 80–399 (+1), High: 400+ (+2) |
-| Keyword complexity | Simple keywords (−1), neutral (0), complex keywords (+2) |
-| Conversation depth | Single turn (0), 2–4 turns (+1), 5+ turns (+2) |
-| Code content | No code (0), code detected (+2) |
+**Usage & Analytics** — cost/savings breakdown, provider latency & SLA compliance, and router shadow-mode disagreements (see [docs/routing.md](docs/routing.md)) in one view:
 
-**Score → Complexity → Model:**
+![Analytics dashboard](docs/images/dashboard-analytics.png)
 
-| Score | Complexity | Default Model |
-|---|---|---|
-| ≤ 0 | LOW | `gemini-2.0-flash` |
-| 1–2 | MEDIUM | `gpt-4o-mini` |
-| ≥ 3 | HIGH | *(original model retained)* |
+**Playground** — send a prompt through the real pipeline and see the routing decision, cache status, and cost/savings live:
 
-The router **only downgrades** — it never routes to a more expensive model than the one requested.
+![Playground](docs/images/dashboard-playground.png)
+
+Every panel shown above is wired to a real endpoint and was verified against a running instance with zero console errors (see the dashboard QA pass referenced in the project history) — not mockups.
 
 ---
 
-## Provider Support
+## 📊 Benchmark Results
 
-| Provider | Models |
-|---|---|
-| **OpenAI** | `gpt-4o`, `gpt-4o-mini`, `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo` |
-| **Google Gemini** | `gemini-2.0-flash`, `gemini-1.5-pro`, `gemini-1.5-flash`, `gemini-1.0-pro` |
+> ⚠️ **Status: local/synthetic overhead numbers below, plus an initial live-traffic pass and a multi-replica concurrency test.** The table's overhead numbers come from `benchmarks/generate_report.py` (in-memory FAISS/SQLite, no real provider traffic). A separate live-traffic validation against real OpenAI calls with real LLM-judge scoring exists in [`benchmarks/LIVE_BENCHMARK_REPORT.md`](benchmarks/LIVE_BENCHMARK_REPORT.md) — it's OpenAI-only and small-sample so far, but it already surfaced a real rule-based router misclassification on a genuinely complex prompt. Concurrency was validated separately (see below). Cross-provider live validation is still open — see [docs/benchmarks.md](docs/benchmarks.md).
 
-Both providers share the same normalised internal response format, keeping provider-specific logic isolated inside `app/providers/`.
+| Optimization Layer | Metric | Result (local, single-process) |
+|---|---|:---:|
+| **Semantic Cache** | Exact Cache Hit Latency | **8.36 ms** |
+| **Semantic Cache** | Paraphrased Hit Rate (@ 0.85 threshold) | **100.0 %** *(synthetic paraphrase set)* |
+| **Intelligent Router** | Decision Overhead (P50) | **1.60 ms** |
+| **Intelligent Router** | Cost-Optimized Down-routing | **100.0 %** *(synthetic prompt set)* |
+| **Context Compression** | Smart (TF-IDF) Token Reduction | **68.8 %** |
+| **Context Compression** | Processing Latency | **5.56 ms** |
+
+**Concurrency / high availability** (2 replicas + nginx + shared Postgres/Redis, mock provider mode, Docker Desktop on an 8-CPU laptop): 3,300 requests at up to 100 concurrent — **0 failures**, load split ~50/50 across replicas, DB row counts exact (nothing dropped or double-counted), ~25 req/s sustained. This measures gateway/DB overhead, not provider latency. Details and methodology: [Production Deployment Guide](docs/deployment.md#ha-validation-results).
+
+> 📖 See full methodology, caveats, and validation status in [docs/benchmarks.md](docs/benchmarks.md).  
+> *Run benchmarks yourself:* `python benchmarks/generate_report.py` or `make bench` (local/synthetic); `python benchmarks/bench_live.py` for the live-traffic pass (requires a real `OPENAI_API_KEY`, makes real billed calls, costs a few cents per run); `python benchmarks/bench_concurrency.py` against a running compose stack for the concurrency test (see the deployment guide).
 
 ---
 
-## License
+## 📚 Documentation Index
 
-MIT
+- [Quickstart Guide](docs/quickstart.md) — 5-minute setup and configuration walkthrough.
+- [Public Benchmarks](docs/benchmarks.md) — Detailed latency, compression, and cost-waterfall analysis.
+- [Intelligent Routing & Online Learning](docs/routing.md) — Complexity assessment, shadow mode, and automatic retraining.
+- [Semantic Caching Guide](docs/caching.md) — Cosine similarity threshold tuning, TTLs, and multi-tenant namespaces.
+- [Plugins Architecture](docs/plugins.md) — Writing custom lifecycle hooks, webhooks, and alerts.
+- [Evaluation & Quality Analytics](docs/evaluation.md) — Dual-mode judge, quality-cost tradeoffs, and user feedback loop.
+- [Production Deployment Guide](docs/deployment.md) — HA Docker Compose stack, migrations, validated load-test results, Kubernetes probes, and production checklist.
+
+---
+
+## 🧪 Testing
+
+OptiLLM maintains high test coverage across all subsystems:
+
+```bash
+# Run complete test suite (166 tests)
+pytest tests/ -v
+
+# Run integration tests only
+pytest tests/integration/ -v
+
+# Run degraded mode & resilience tests
+pytest tests/integration/test_degraded_mode.py -v
+```
+
+---
+
+## 📄 License
+
+MIT License.

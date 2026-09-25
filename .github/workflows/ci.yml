@@ -47,6 +47,10 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # CPU-only torch first — otherwise sentence-transformers pulls the
+          # default GPU build, downloading several GB of unused NVIDIA CUDA
+          # libraries on every CI run for nothing (this runner has no GPU).
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           pip install mypy types-requests
 
@@ -73,7 +77,11 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          # See the lint job's install step for why this comes first.
+          pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          python -m spacy download en_core_web_sm
 
       - name: Create test .env
         run: |

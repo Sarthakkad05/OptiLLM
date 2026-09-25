@@ -2,6 +2,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from sqlalchemy import text
 
 from alembic import context
 
@@ -21,6 +22,9 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+# Arbitrary app-wide constant identifying the migration advisory lock.
+MIGRATION_LOCK_KEY = 72_417_001
 
 
 def run_migrations_offline() -> None:
@@ -51,6 +55,16 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            # Every replica runs `alembic upgrade head` on startup (app/main.py),
+            # so with N replicas booting together they race: on a fresh DB both
+            # try to create alembic_version and the loser crashes. Serialize them
+            # with a transaction-scoped advisory lock — waiters block until the
+            # first replica commits, then see the DB already at head and no-op.
+            if connection.dialect.name == "postgresql":
+                connection.execute(
+                    text("SELECT pg_advisory_xact_lock(:key)"),
+                    {"key": MIGRATION_LOCK_KEY},
+                )
             context.run_migrations()
 
 

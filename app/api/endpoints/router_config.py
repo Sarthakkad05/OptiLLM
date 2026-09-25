@@ -1,26 +1,28 @@
 """
-Router Configuration, Explainability, and Training Endpoints
-Exposes APIs for inspecting and updating routing config, generating explainability reports,
-and retraining the AI router ML classifier.
+Router Configuration & Explainability Endpoints
+Exposes APIs for inspecting and updating routing config, and generating
+explainability reports.
+
+Retraining the AI router lives at POST /api/v1/router/train in
+app/api/endpoints/feedback.py, which calls the real evaluate-then-hotswap
+pipeline in app/engine/router_trainer.py. An earlier, simpler /router/train
+route used to live here too, calling AIRouter.train() directly with no
+train/eval split and no hot-swap check — it silently shadowed the safe one
+below it in the route table (FastAPI matches routes in registration order),
+so the safety gate the differentiator is supposed to provide was never
+actually reachable via the API. Removed rather than fixed in place, since
+feedback.py's version is the complete, correct implementation.
 """
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
-from app.db.session import get_db
-
-from app.engine.ai_router import get_ai_router
 from app.engine.router import (
     explain_routing,
     get_routing_config,
     update_routing_config,
-)
-from app.services.router_exporter import (
-    export_historical_routing_data,
-    generate_synthetic_training_dataset,
 )
 
 router = APIRouter(prefix="/router", tags=["Router"])
@@ -38,13 +40,6 @@ class RouterConfigUpdateRequest(BaseModel):
 class RouterExplainRequest(BaseModel):
     messages: List[Dict[str, Any]] = Field(..., description="Prompt messages to analyze")
     model: str = Field("gpt-4o", description="Requested LLM model")
-
-
-class RouterTrainRequest(BaseModel):
-    use_synthetic_fallback: bool = Field(
-        True, description="Fallback to synthetic dataset if database logs are sparse (< 10 logs)"
-    )
-    max_logs: int = Field(1000, ge=10, le=10000, description="Max historical database logs to use")
 
 
 @router.get("/config", summary="Get routing configuration")
@@ -79,38 +74,3 @@ def explain(payload: RouterExplainRequest) -> Dict[str, Any]:
             status_code=status.HTTP_400_BAD_REQUEST, detail="Messages list cannot be empty."
         )
     return explain_routing(payload.messages, payload.model)
-
-
-@router.post("/train", summary="Train/retrain AI router classifier")
-def train_router(
-    payload: RouterTrainRequest, db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    """
-    Retrain the AI Router ML classifier using database request logs or synthetic seed dataset.
-    """
-    exported = export_historical_routing_data(db, max_rows=payload.max_logs)
-
-    features = exported["features"]
-    labels = exported["labels"]
-
-    if len(features) < 10 and payload.use_synthetic_fallback:
-        synth_features, synth_labels = generate_synthetic_training_dataset()
-        features.extend(synth_features)
-        labels.extend(synth_labels)
-
-    if not features:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Insufficient training data available to train AI router.",
-        )
-
-    try:
-        ai_router = get_ai_router()
-        train_result = ai_router.train(features, labels)
-        train_result["total_samples"] = len(labels)
-        return train_result
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to train AI router: {str(e)}",
-        )

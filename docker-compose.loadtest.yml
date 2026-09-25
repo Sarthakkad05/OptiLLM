@@ -1,0 +1,26 @@
+# Overlay for HA / concurrency validation (see docs/deployment.md).
+# Forces mock mode (blank provider keys) so the load test measures gateway/DB/cache
+# overhead under concurrency, not real provider latency or spend, and raises rate
+# limits so the load generator doesn't trip them. NOT for production use.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml up -d --build --scale optillm=2
+#   python benchmarks/bench_concurrency.py --url http://localhost:8000 --requests 1000 --concurrency 50
+services:
+  optillm:
+    environment:
+      - DATABASE_URL=postgresql://optillm:password@db:5432/optillmdb
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=
+      - ANTHROPIC_API_KEY=
+      - GEMINI_API_KEY=
+      - GROQ_API_KEY=
+      - AZURE_OPENAI_API_KEY=
+      - MISTRAL_API_KEY=
+      # Rate limiting and provider behavior are separate concerns from what
+      # this test validates (gateway/DB/cache correctness under concurrent
+      # load across replicas) — raised so the load generator's request rate
+      # doesn't trip them and confound the results.
+      - RATE_LIMIT_PER_MINUTE=100000
+      - GLOBAL_RATE_LIMIT_PER_MINUTE=100000
+      - AUTO_BLOCKLIST_ENABLED=false

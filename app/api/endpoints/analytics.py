@@ -210,6 +210,13 @@ def get_routing_stats(db: Session = Depends(get_db)):
         level.value: model for level, (model, _) in ROUTING_TABLE.items() if model
     }
 
+    total_shadow_disagreements = (
+        db.query(func.count(RequestLog.id))
+        .filter(RequestLog.shadow_disagreement.is_(True))
+        .scalar()
+        or 0
+    )
+
     return {
         "total_routed_requests": total_routed,
         "routing_rate": round(total_routed / total_requests, 4),
@@ -218,6 +225,42 @@ def get_routing_stats(db: Session = Depends(get_db)):
             {"model": r.model_used, "count": r.count} for r in model_breakdown
         ],
         "routing_table": routing_table_info,
+        "shadow_disagreement_count": total_shadow_disagreements,
+        "shadow_disagreement_rate": round(total_shadow_disagreements / total_requests, 4),
+    }
+
+
+@router.get("/routing/shadow-disagreements", tags=["Analytics"])
+def get_shadow_disagreements(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """
+    Lists recent requests where the shadow-mode AI router's predicted complexity
+    differed from the rule-based router's decision. Shadow mode never acts on
+    these — it only observes — so this is the evidence needed to decide whether
+    promoting the AI router out of shadow mode would actually help.
+    """
+    rows = (
+        db.query(RequestLog)
+        .filter(RequestLog.shadow_disagreement.is_(True))
+        .order_by(RequestLog.timestamp.desc())
+        .limit(min(limit, 200))
+        .all()
+    )
+    return {
+        "count": len(rows),
+        "disagreements": [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "prompt_snippet": r.prompt_snippet,
+                "model_requested": r.model_requested,
+                "model_used": r.model_used,
+                "ai_predicted_complexity": r.ai_predicted_complexity,
+            }
+            for r in rows
+        ],
     }
 
 
@@ -281,6 +324,26 @@ def get_quality_analytics_endpoint(
     return analytics_service.get_quality_analytics(
         db, start_date=start_dt, end_date=end_dt, provider=provider, tag=tag
     )
+
+
+@router.get(
+    "/analytics/cost-attribution",
+    tags=["Analytics"],
+    summary="Cost Attribution & Savings Waterfall",
+    description="Returns detailed spend attribution by model and team, savings waterfall breakdown, provider latency percentiles, and SLA compliance.",
+)
+def get_cost_attribution_endpoint(
+    start_date: Optional[str] = Query(None, description="Start date filter (ISO or YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date filter (ISO or YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns cost attribution by model and team, savings waterfall, provider latency percentiles, and SLA compliance.
+    """
+    start_dt = _parse_datetime(start_date)
+    end_dt = _parse_datetime(end_date)
+    return analytics_service.get_cost_attribution(db, start_date=start_dt, end_date=end_dt)
+
 
 
 

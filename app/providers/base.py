@@ -56,3 +56,15 @@ class BaseProvider(ABC):
         Yields content text delta strings.
         """
         pass
+
+    async def embed(
+        self,
+        texts: List[str],
+        model: str,
+    ) -> List[List[float]]:
+        """
+        Optional: Generate embeddings for a list of texts.
+        Providers that support embeddings should override this method.
+        Raises NotImplementedError by default.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not support embeddings.")

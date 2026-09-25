@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optillm-client"
-version = "0.10.0"
+version = "1.0.0"
 description = "AI Gateway Client SDK & CLI for OptiLLM"
 readme = "README.md"
 requires-python = ">=3.11"
